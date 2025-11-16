@@ -9,7 +9,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"gorm.io/driver/postgres"
+	pgdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -49,7 +49,7 @@ func SetupTestDB(t *testing.T) (*gorm.DB, func()) {
 	}
 
 	// Connect using GORM
-	db, err := gorm.Open(postgres.Open(connStr), &gorm.Config{})
+	db, err := gorm.Open(pgdriver.Open(connStr), &gorm.Config{})
 	if err != nil {
 		cleanup()
 		t.Fatalf("Failed to connect to database: %v", err)
