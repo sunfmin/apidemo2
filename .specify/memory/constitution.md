@@ -1,38 +1,23 @@
 <!--
 Sync Impact Report:
-- Version: 1.2.1 → 1.3.0 (MINOR bump - new mandatory testing tool: testcontainers-go)
+- Version: 1.4.0 → 1.4.1 (PATCH bump - remove transaction rollback documentation, keep only database truncation)
 - Modified principles: None
-- Technology Stack changes:
-  - Test Database: NOW requires testcontainers-go library (removed manual Docker container management)
-  - Simplified test setup with automatic container lifecycle management
-  - Container cleanup now automatic (no manual container name tracking needed)
-- Added requirements:
-  - Test suite MUST use testcontainers-go for PostgreSQL container management
-  - Tests MUST use testcontainers PostgresContainer for automatic lifecycle
-  - Container startup/teardown is handled by testcontainers (automatic cleanup)
-- Removed requirements:
-  - No longer need manual container naming with timestamps
-  - No longer need manual docker run commands
-  - No longer need manual container cleanup
-- Templates requiring updates:
-  ✅ .specify/templates/tasks-template.md (Update setup tasks to use testcontainers)
-  ⚠ Test examples need testcontainers-go imports and setup
+- Removed content:
+  - Strategy 2: Transaction Rollback (optional optimization) - removed entirely
+  - Transaction rollback code examples - removed
+  - References to dependency injection for testing - removed
 - Rationale:
-  - testcontainers-go provides automatic container lifecycle management
-  - Eliminates manual Docker container management and cleanup issues
-  - Industry standard for integration testing with containers
-  - Automatic port allocation prevents conflicts
-  - Automatic cleanup prevents orphaned containers
-  - Better support in CI/CD environments
-  - Simplified test setup code with less boilerplate
+  - Simplify constitution to single clear approach
+  - Avoid confusing readers with multiple strategies
+  - Database truncation is sufficient for all cases
+  - Remove "optimization" complexity that most projects don't need
+  - Keep documentation focused and opinionated
 - Impact:
-  - All test setup code must use testcontainers-go library
-  - No more manual docker run commands or container name tracking
-  - Cleaner test code with automatic resource cleanup
-  - Better isolation between test runs
-- Dependencies:
-  - Requires github.com/testcontainers/testcontainers-go
-  - Requires github.com/testcontainers/testcontainers-go/modules/postgres
+  - Constitution now shows only one way to do test isolation (database truncation)
+  - Clearer guidance - no decision fatigue
+  - Simpler to follow and implement
+- Templates requiring updates:
+  ✅ No template changes needed (already updated in v1.4.0)
 -->
 
 
@@ -47,7 +32,7 @@ All tests MUST be integration tests that interact with real dependencies:
 - NO mocking of database calls, HTTP clients, or external services
 - Tests MUST prepare fixture data directly in the database
 - Test database MUST be isolated per test run
-- Each test MUST use transactions with rollback for isolation (no manual cleanup)
+- Each test MUST use database truncation for isolation (truncate tables after test)
 
 **Rationale**: Integration tests catch real-world issues that unit tests with mocks cannot, including database constraint violations, connection pooling issues, transaction handling bugs, and serialization problems.
 
@@ -260,9 +245,31 @@ func ProductCreateHandler(w http.ResponseWriter, r *http.Request) {
 - Test suite MUST use `testcontainers.PostgresContainer` for automatic lifecycle management
 - Container startup, port allocation, and cleanup are handled automatically by testcontainers
 - Test database schema MUST match production schema via GORM AutoMigrate
-- Tests MUST use transaction-based isolation (begin transaction, run test, rollback)
 - Container cleanup MUST use `defer container.Terminate(ctx)` pattern
 - CI/CD environments MUST have Docker daemon available for testcontainers
+
+### Test Isolation Strategy
+
+**Database Truncation** - The single, simple approach for all tests.
+
+**How it works:**
+- Tests run with real database and commit transactions normally
+- After each test completes, truncate all modified tables to clean up
+- Use `defer` pattern to ensure cleanup happens even on test failure
+
+**Requirements:**
+- Tests MUST truncate all relevant tables after each test using `defer`
+- Truncation MUST use `CASCADE` to handle foreign key constraints
+- Truncate in reverse dependency order (children before parents) for safety
+- Use helper function to centralize truncation logic
+
+**Benefits:**
+- ✅ Works with any code structure (no special patterns needed)
+- ✅ Tests actual production behavior (with real commits)
+- ✅ Simple and reliable
+- ✅ No limitations or gotchas
+- ✅ Write production code naturally
+- ✅ Fast enough (~1-5ms overhead per test)
 
 **Example Testcontainers Setup**:
 ```go
@@ -328,38 +335,132 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
     return db, cleanup
 }
 
-// Run test with transaction rollback for isolation
+// Create helper function for truncation (reusable across all tests)
+func truncateTables(db *gorm.DB, tables ...string) {
+    // Truncate in reverse order (children before parents)
+    for i := len(tables) - 1; i >= 0; i-- {
+        db.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tables[i]))
+    }
+}
+
+// Example test with inline truncation
 func TestProductCreate(t *testing.T) {
     db, cleanup := setupTestDB(t)
-    defer cleanup() // Cleanup container when test finishes
+    defer cleanup()
     
-    // Begin transaction
-    tx := db.Begin()
-    defer tx.Rollback() // Always rollback at end of test
+    // Truncate tables after test (in reverse dependency order)
+    defer func() {
+        db.Exec("TRUNCATE TABLE order_items CASCADE")
+        db.Exec("TRUNCATE TABLE orders CASCADE")
+        db.Exec("TRUNCATE TABLE products CASCADE")
+    }()
     
-    // Run test with tx instead of db
+    // Handler uses normal code with real db and commits
+    handler := NewProductHandler(db)
     product := &Product{Name: "Test Product", SKU: "TEST-001"}
-    if err := tx.Create(product).Error; err != nil {
+    
+    // Handler commits internally (normal production behavior)
+    err := handler.Create(product)
+    if err != nil {
         t.Fatalf("Failed to create product: %v", err)
     }
     
-    // Assertions...
+    // Verify committed data (tests actual behavior)
+    var found Product
+    if err := db.First(&found, product.ID).Error; err != nil {
+        t.Fatalf("Product not found: %v", err)
+    }
+    
+    // Truncate cleans up at end (even on test failure)
+}
+
+// Cleaner approach using helper function
+func TestProductCreateWithHelper(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products", "orders", "order_items")
+    
+    handler := NewProductHandler(db)
+    product := &Product{Name: "Test Product", SKU: "TEST-001"}
+    
+    if err := handler.Create(product); err != nil {
+        t.Fatalf("Failed: %v", err)
+    }
+    
+    // Verify product was created
+    var found Product
+    if err := db.First(&found, product.ID).Error; err != nil {
+        t.Fatalf("Product not found: %v", err)
+    }
+    
+    if found.Name != product.Name {
+        t.Errorf("Expected name %s, got %s", product.Name, found.Name)
+    }
 }
 ```
 
 **Parallel Test Support**:
 ```go
-// For parallel tests, use t.Parallel() with testcontainers
+// Safe with testcontainers - each test gets own container
 func TestProductCreateParallel(t *testing.T) {
-    t.Parallel() // Safe with testcontainers - each test gets own container
+    t.Parallel() // Each parallel test gets isolated container
     
     db, cleanup := setupTestDB(t)
     defer cleanup()
+    defer truncateTables(db, "products", "orders", "order_items")
     
-    tx := db.Begin()
+    handler := NewProductHandler(db)
+    product := &Product{Name: "Test", SKU: "TEST"}
+    
+    if err := handler.Create(product); err != nil {
+        t.Fatalf("Failed: %v", err)
+    }
+    
+    // Verify product exists
+    var found Product
+    db.First(&found, product.ID)
+    // Assertions...
+}
+```
+
+**Handler Implementation (Simple Production Code)**:
+```go
+// Normal handler with db dependency - no special test structure
+type ProductHandler struct {
+    db *gorm.DB
+}
+
+func NewProductHandler(db *gorm.DB) *ProductHandler {
+    return &ProductHandler{db: db}
+}
+
+func (h *ProductHandler) Create(product *Product) error {
+    // Normal production code - manages its own transaction
+    tx := h.db.Begin()
     defer tx.Rollback()
     
-    // Test code...
+    if err := tx.Create(product).Error; err != nil {
+        return err
+    }
+    
+    return tx.Commit().Error // Commits normally
+}
+
+// HTTP handler is straightforward
+func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    var req pb.ProductCreateRequest
+    if err := json.NewDecoder(r.Body).Unmarshal(&req); err != nil {
+        http.Error(w, "Invalid request", 400)
+        return
+    }
+    
+    product := &Product{Name: req.Name, SKU: req.Sku}
+    if err := h.Create(product); err != nil {
+        http.Error(w, err.Error(), 500)
+        return
+    }
+    
+    json.NewEncoder(w).Encode(product)
 }
 ```
 
@@ -381,6 +482,9 @@ func TestProductCreateParallel(t *testing.T) {
 - Reviewers MUST verify `.proto` files are updated for API changes
 - Reviewers MUST verify OpenTracing spans are created for new endpoints
 - Reviewers MUST verify GORM is used for database access (no raw SQL unless justified)
+- Reviewers MUST verify tests use database truncation for cleanup (defer pattern)
+- Reviewers MUST verify truncation handles all tables modified by test
+- Reviewers MUST verify truncation uses CASCADE for foreign key dependencies
 - Tests MUST be reviewed before implementation code
 
 ## Governance
@@ -406,4 +510,4 @@ func TestProductCreateParallel(t *testing.T) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.3.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.4.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16

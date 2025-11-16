@@ -76,10 +76,11 @@ description: "Task list template for feature implementation"
 - [ ] T014 [P] Implement OpenTracing middleware to instrument all HTTP endpoints
 - [ ] T015 [P] Implement middleware: logging, recovery, CORS
 - [ ] T016 [P] Create GORM database connection pool and health check
-- [ ] T017 [P] Setup testcontainers test database helper (automatic container lifecycle, transaction rollback for test isolation)
+- [ ] T017 [P] Setup testcontainers test database helper (automatic container lifecycle, database truncation for test isolation)
 - [ ] T018 Implement base error response types and JSON marshaling
 - [ ] T019 [P] Create fixture helper utilities for test database population using GORM
-- [ ] T020 [P] Verify OpenTracing spans are created for test requests
+- [ ] T020 [P] Create table truncation helper function (truncate tables in reverse dependency order with CASCADE)
+- [ ] T021 [P] Verify OpenTracing spans are created for test requests
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -96,27 +97,28 @@ description: "Task list template for feature implementation"
 > **CRITICAL: Write these tests FIRST, ensure they FAIL before implementation**
 > **All tests MUST use real PostgreSQL (Docker), table-driven pattern, and cover edge cases**
 
-- [ ] T021 [US1] Integration test for [endpoint] in [package]/[handler]_test.go
+- [ ] T022 [US1] Integration test for [endpoint] in [package]/[handler]_test.go
   - Happy path test cases
   - Edge cases: input validation, boundary conditions, auth errors
   - Edge cases: data state (404, conflicts), database errors, HTTP specifics
   - Use httptest.ResponseRecorder and real testcontainers PostgreSQL database fixtures
   - Use GORM for fixture data setup
+  - Use database truncation for cleanup (defer truncateTables pattern)
   - Use protobuf structs (NOT maps) for request/response
   - Verify OpenTracing spans are created (NoopTracer default, mock tracer for span verification tests)
   - Table-driven test structure with test case structs
 
 ### Implementation for User Story 1
 
-- [ ] T022 [P] [US1] Create [Entity1] GORM model in [package]/[entity1].go
-- [ ] T023 [P] [US1] Create [Entity2] GORM model in [package]/[entity2].go
-- [ ] T024 [US1] Implement GORM database repository in [package]/[repository].go (depends on T022, T023)
-- [ ] T025 [US1] Implement ServeHTTP handler using net/http in [package]/[handler].go
-- [ ] T026 [US1] Add OpenTracing span creation in handler (extract/start span, set tags)
-- [ ] T027 [US1] Add child spans for database operations (instrument GORM queries)
-- [ ] T028 [US1] Add request validation and error responses with span error tagging
-- [ ] T029 [US1] Add logging and error handling
-- [ ] T030 [US1] Create fixture helpers using GORM in [package]/fixtures_test.go
+- [ ] T023 [P] [US1] Create [Entity1] GORM model in [package]/[entity1].go
+- [ ] T024 [P] [US1] Create [Entity2] GORM model in [package]/[entity2].go
+- [ ] T025 [US1] Implement GORM database repository in [package]/[repository].go (depends on T023, T024)
+- [ ] T026 [US1] Implement ServeHTTP handler using net/http in [package]/[handler].go
+- [ ] T027 [US1] Add OpenTracing span creation in handler (extract/start span, set tags)
+- [ ] T028 [US1] Add child spans for database operations (instrument GORM queries)
+- [ ] T029 [US1] Add request validation and error responses with span error tagging
+- [ ] T030 [US1] Add logging and error handling
+- [ ] T031 [US1] Create fixture helpers using GORM in [package]/fixtures_test.go
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
