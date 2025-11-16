@@ -108,7 +108,14 @@
 - Verify trace context propagation across service boundaries
 - Verify span tags include http.method, http.url, http.status_code
 - Verify error spans are tagged with error=true
-- Verify child spans are created for database operations
+- Verify child spans are created for service operations (e.g., "ProductService.Create")
+- Verify database operations are traced as a single child span per transaction (NOT per SQL query)
+
+**Protobuf Assertions**:
+- Verify ALL protobuf message assertions use `cmp.Diff()` with `protocmp.Transform()`
+- Verify tests do NOT use individual field comparisons (e.g., `if response.Name != expected.Name`)
+- Verify tests do NOT use `==` or `reflect.DeepEqual` for protobuf messages
+- Verify complete message comparison catches all field differences
 
 ## Requirements *(mandatory)*
 

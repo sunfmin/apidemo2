@@ -1,26 +1,25 @@
 <!--
 Sync Impact Report:
-- Version: 1.5.1 → 1.5.2 (PATCH bump - clarify tracing granularity: service operations, not individual SQL)
+- Version: 1.5.2 → 1.5.3 (PATCH bump - enforce protobuf comparison for all test assertions)
 - Modified principles:
-  - VII. Distributed Tracing - clarified NOT to trace individual SQL executions
+  - VI. Protobuf Data Structures - strengthened requirement for protobuf comparison in tests
 - Clarifications added:
-  - Trace at service operation level (e.g., "ProductService.Create")
-  - Do NOT trace individual SQL queries (too much overhead)
-  - Use database logging/metrics for SQL query analysis instead
-  - Keep tracing focused on request flow and service boundaries
+  - Tests MUST NOT use individual field comparisons for protobuf messages
+  - ALL protobuf message assertions MUST use cmp.Diff() with protocmp.Transform()
+  - Individual field checks ONLY acceptable for non-protobuf types
+  - Added explicit examples showing correct vs incorrect assertion patterns
 - Rationale:
-  - Individual SQL tracing creates excessive overhead (spans, storage, bandwidth)
-  - Overwhelming trace data makes debugging harder (too much noise)
-  - Most SQL queries are fast and don't need individual spans
-  - Database query analysis better served by database metrics/slow query logs
-  - Tracing should focus on inter-service communication and operation flow
+  - Individual field comparisons miss structural differences and unknown fields
+  - Incomplete validation leads to bugs going undetected
+  - Full message comparison ensures complete test coverage
+  - Protocmp handles protobuf semantics correctly (unknown fields, extensions, etc.)
 - Impact:
-  - Fewer spans created (less overhead, cleaner traces)
-  - Service-level spans still show database operation timing
-  - Use pg_stat_statements or database logs for SQL-level analysis
-  - Clearer guidance on what to trace
+  - Tests must be updated to use protocmp for all protobuf assertions
+  - Better test coverage and bug detection
+  - Consistent assertion patterns across all tests
 - Templates requiring updates:
-  ✅ No template changes needed
+  ✅ spec-template.md - updated to reference protobuf comparison requirement
+  ✅ tasks-template.md - already references protobuf structs and comparison
 -->
 
 
@@ -99,8 +98,11 @@ All public API data structures MUST be defined in Protocol Buffers:
 - All API changes MUST update the corresponding `.proto` files first
 - Tests MUST use proper protobuf comparison packages for assertions (e.g., `protocmp` with `google/go-cmp`)
 - Tests MUST NOT use standard `==` or `reflect.DeepEqual` for protobuf message comparison
+- Tests MUST NOT use individual field comparisons (e.g., `if response.Name != expected.Name`) for protobuf messages
+- ALL protobuf message assertions in tests MUST use `cmp.Diff()` with `protocmp.Transform()` to compare entire messages
+- Individual field checks are ONLY acceptable for non-protobuf types (e.g., checking if a string ID is not empty before comparison)
 
-**Rationale**: Protobuf provides compile-time type safety, eliminates runtime type assertion errors, enables automatic validation, supports multiple language clients, enforces schema-first API design, and prevents the fragile `map[string]interface{}` pattern that loses type information and requires extensive runtime validation. Proper protobuf comparison ensures correct field comparison including unknown fields, extensions, and proto semantics.
+**Rationale**: Protobuf provides compile-time type safety, eliminates runtime type assertion errors, enables automatic validation, supports multiple language clients, enforces schema-first API design, and prevents the fragile `map[string]interface{}` pattern that loses type information and requires extensive runtime validation. Proper protobuf comparison ensures correct field comparison including unknown fields, extensions, and proto semantics. Individual field comparisons miss structural differences, ignore unknown fields, and fail to validate the complete message structure, leading to incomplete test coverage.
 
 **Examples**:
 ```protobuf
@@ -146,16 +148,56 @@ import (
     "google.golang.org/protobuf/testing/protocmp"
 )
 
-// CORRECT: Use protocmp for protobuf comparison
-expected := &pb.Product{Name: "Test", Sku: "TEST-001"}
-actual := &pb.Product{Name: "Test", Sku: "TEST-001"}
+// CORRECT: Use protocmp for complete protobuf message comparison
+expected := &pb.Product{
+    Id:   "123",
+    Name: "Test Product",
+    Sku:  "TEST-001",
+    Description: "Test description",
+}
+actual := &pb.Product{
+    Id:   "123",
+    Name: "Test Product",
+    Sku:  "TEST-001",
+    Description: "Test description",
+}
 
+// Compare entire messages - catches all differences
 if diff := cmp.Diff(expected, actual, protocmp.Transform()); diff != "" {
     t.Errorf("Product mismatch (-want +got):\n%s", diff)
 }
 
+// CORRECT: For response validation, compare entire response message
+var response pb.CreateProductResponse
+json.NewDecoder(rec.Body).Decode(&response)
+
+expectedResponse := &pb.CreateProductResponse{
+    Product: &pb.Product{
+        Id:   "123",
+        Name: "Test Product",
+        Sku:  "TEST-001",
+    },
+}
+
+if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+    t.Errorf("Response mismatch (-want +got):\n%s", diff)
+}
+
 // WRONG: Do not use == or DeepEqual
 if actual != expected { // Incorrect for protobuf
+    t.Error("mismatch")
+}
+
+// WRONG: Do not use individual field comparisons
+if response.Product.Name != expectedResponse.Product.Name { // Misses other fields!
+    t.Error("name mismatch")
+}
+if response.Product.Sku != expectedResponse.Product.Sku { // Incomplete validation!
+    t.Error("sku mismatch")
+}
+
+// WRONG: Do not use reflect.DeepEqual
+if !reflect.DeepEqual(actual, expected) { // Incorrect for protobuf
     t.Error("mismatch")
 }
 ```
@@ -743,10 +785,13 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 - Pull requests MUST include integration tests for all new endpoints
 - Tests MUST use protobuf-generated structs (no `map[string]interface{}`)
+- Tests MUST use `cmp.Diff()` with `protocmp.Transform()` for ALL protobuf message assertions
+- Tests MUST NOT use individual field comparisons for protobuf messages
 - Tests MUST demonstrate edge case coverage
 - Reviewers MUST verify table-driven test structure
 - Reviewers MUST verify no mocking is used for database or HTTP layers
 - Reviewers MUST verify `.proto` files are updated for API changes
+- Reviewers MUST verify protobuf assertions use protocmp (not individual field checks)
 - Reviewers MUST verify OpenTracing spans are created for new endpoints
 - Reviewers MUST verify GORM is used for database access (no raw SQL unless justified)
 - Reviewers MUST verify tests use database truncation for cleanup (defer pattern)
@@ -777,4 +822,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.5.2 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.5.3 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16

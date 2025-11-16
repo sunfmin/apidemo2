@@ -108,6 +108,8 @@ description: "Task list template for feature implementation"
   - Use GORM for fixture data setup
   - Use database truncation for cleanup (defer truncateTables pattern)
   - Use protobuf structs (NOT maps) for request/response
+  - Use `cmp.Diff()` with `protocmp.Transform()` for ALL protobuf message assertions (MANDATORY)
+  - Do NOT use individual field comparisons for protobuf messages
   - Verify OpenTracing spans are created (NoopTracer default, mock tracer for span verification tests)
   - Table-driven test structure with test case structs
 

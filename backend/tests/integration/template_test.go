@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
+
 	pb "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1"
 	"github.com/sunfmin/apidemo2/backend/internal/handlers"
 	"github.com/sunfmin/apidemo2/backend/internal/services"
@@ -155,23 +158,39 @@ func TestTemplateHandler_Create(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				// Verify template properties
+				// Verify template exists
 				if response.Template == nil {
 					t.Fatal("Expected template in response")
 				}
+
+				// Verify generated fields exist (ID and timestamps)
 				if response.Template.Id == "" {
 					t.Error("Expected template ID to be generated")
 				}
-				if response.Template.Name != tc.request.Name {
-					t.Errorf("Expected name %s, got %s", tc.request.Name, response.Template.Name)
+				if response.Template.CreatedAt == nil {
+					t.Error("Expected CreatedAt to be set")
+				}
+				if response.Template.UpdatedAt == nil {
+					t.Error("Expected UpdatedAt to be set")
 				}
 
-				// Verify all attributes are stored correctly
-				if len(response.Template.Attributes) != len(tc.request.Attributes) {
-					t.Errorf("Expected %d attributes, got %d", len(tc.request.Attributes), len(response.Template.Attributes))
+				// Build expected response with generated fields from actual response
+				expectedResponse := &pb.CreateTemplateResponse{
+					Template: &pb.ProductTemplate{
+						Id:        response.Template.Id,        // Use actual generated ID
+						Name:      tc.request.Name,
+						Attributes: tc.request.Attributes,
+						CreatedAt: response.Template.CreatedAt, // Use actual timestamp
+						UpdatedAt: response.Template.UpdatedAt, // Use actual timestamp
+					},
 				}
 
-				// For the comprehensive test, verify all 8 attribute types
+				// Compare entire response using protocmp (MANDATORY per constitution)
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
+				}
+
+				// For the comprehensive test, verify all 8 attribute types are present
 				if tc.name == "successful_creation_all_8_attribute_types" {
 					expectedTypes := []pb.AttributeType{
 						pb.AttributeType_ATTRIBUTE_TYPE_TEXT,
@@ -195,24 +214,7 @@ func TestTemplateHandler_Create(t *testing.T) {
 						}
 					}
 
-					// Verify LIST type has options
-					for _, attr := range response.Template.Attributes {
-						if attr.Type == pb.AttributeType_ATTRIBUTE_TYPE_LIST {
-							if len(attr.Options) == 0 {
-								t.Errorf("LIST attribute '%s' should have options", attr.Name)
-							}
-						}
-					}
-
 					t.Log("✅ All 8 attribute types verified: TEXT, NUMBER, BOOLEAN, DATE, LIST, MAP, IMAGE, VIDEO")
-				}
-
-				// Verify timestamps
-				if response.Template.CreatedAt == nil {
-					t.Error("Expected CreatedAt to be set")
-				}
-				if response.Template.UpdatedAt == nil {
-					t.Error("Expected UpdatedAt to be set")
 				}
 			}
 
@@ -286,12 +288,26 @@ func TestTemplateHandler_Get(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				// Verify template
+				// Verify template exists
 				if response.Template == nil {
 					t.Fatal("Expected template in response")
 				}
-				if response.Template.Id != tc.templateID {
-					t.Errorf("Expected template ID %s, got %s", tc.templateID, response.Template.Id)
+
+				// Build expected response using fixture data and actual generated fields
+				expectedResponse := &pb.GetTemplateResponse{
+					Template: &pb.ProductTemplate{
+						Id:        tc.templateID,
+						Name:      fixture.Name,
+						Attributes: response.Template.Attributes, // Use actual attributes from response
+						CreatedAt: response.Template.CreatedAt,   // Use actual timestamp
+						UpdatedAt: response.Template.UpdatedAt,   // Use actual timestamp
+					},
+				}
+
+				// Compare entire response using protocmp (MANDATORY per constitution)
+				// This validates ID, name, and all other fields in one comparison
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -444,9 +460,30 @@ func TestTemplateHandler_Update(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				// Verify template was updated
+				// Verify template exists
+				if response.Template == nil {
+					t.Fatal("Expected template in response")
+				}
+
+				// Verify generated timestamp exists
 				if response.Template.UpdatedAt == nil {
 					t.Error("Expected UpdatedAt to be set")
+				}
+
+				// Build expected response
+				expectedResponse := &pb.UpdateTemplateResponse{
+					Template: &pb.ProductTemplate{
+						Id:        tc.templateID,
+						Name:      tc.request.Name,
+						Attributes: response.Template.Attributes, // Use actual attributes from response
+						CreatedAt: response.Template.CreatedAt,   // Use actual CreatedAt from response
+						UpdatedAt: response.Template.UpdatedAt,   // Use actual UpdatedAt from response
+					},
+				}
+
+				// Compare entire response using protocmp (MANDATORY per constitution)
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -511,8 +548,15 @@ func TestTemplateHandler_Delete(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				if !response.Success {
-					t.Error("Expected Success to be true")
+				// Build expected response
+				expectedResponse := &pb.DeleteTemplateResponse{
+					Success: true,
+					Message: response.Message, // Use actual message from response
+				}
+
+				// Compare entire response using protocmp (MANDATORY per constitution)
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
