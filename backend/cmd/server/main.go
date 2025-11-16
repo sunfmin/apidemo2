@@ -25,8 +25,52 @@ func main() {
 	opentracing.SetGlobalTracer(opentracing.NoopTracer{})
 	log.Println("✅ OpenTracing initialized (NoopTracer)")
 
+	// Initialize database connection (TODO: Load from config)
+	// For now, skip database connection in main - tests will use testcontainers
+	// Production deployment will need proper database configuration
+
 	// Create HTTP router
 	mux := http.NewServeMux()
+
+	// Health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	// TODO: Initialize services and handlers once database is connected
+	// db, err := database.Connect(config)
+	// templateService := services.NewTemplateService(db)
+	// templateHandler := handlers.NewTemplateHandler(templateService)
+	// 
+	// // Template routes
+	// mux.HandleFunc("/api/v1/templates", func(w http.ResponseWriter, r *http.Request) {
+	// 	switch r.Method {
+	// 	case http.MethodPost:
+	// 		templateHandler.Create(w, r)
+	// 	case http.MethodGet:
+	// 		templateHandler.List(w, r)
+	// 	default:
+	// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// 	}
+	// })
+	// 
+	// mux.HandleFunc("/api/v1/templates/", func(w http.ResponseWriter, r *http.Request) {
+	// 	switch r.Method {
+	// 	case http.MethodGet:
+	// 		templateHandler.Get(w, r)
+	// 	case http.MethodPut:
+	// 		templateHandler.Update(w, r)
+	// 	case http.MethodDelete:
+	// 		templateHandler.Delete(w, r)
+	// 	default:
+	// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// 	}
+	// })
+
+	// TODO: Register product routes
+	// TODO: Register variant routes
+	// TODO: Register media routes
 
 	// Apply middleware chain
 	handler := middleware.Recovery(
@@ -36,17 +80,6 @@ func main() {
 			),
 		),
 	)
-
-	// Health check endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
-
-	// TODO: Register template routes
-	// TODO: Register product routes
-	// TODO: Register variant routes
-	// TODO: Register media routes
 
 	// Start server
 	addr := ":8080"

@@ -11,6 +11,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	pgdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/sunfmin/apidemo2/backend/internal/models"
 )
 
 // SetupTestDB creates a PostgreSQL test container and returns a GORM connection
@@ -56,11 +58,11 @@ func SetupTestDB(t *testing.T) (*gorm.DB, func()) {
 	}
 
 	// Run AutoMigrate for all models
-	// Note: Models will be added here as they are implemented
-	// if err := db.AutoMigrate(&models.ProductTemplate{}, &models.Product{}, &models.ProductVariant{}, &models.MediaFile{}); err != nil {
-	// 	cleanup()
-	// 	t.Fatalf("Failed to run migrations: %v", err)
-	// }
+	// Note: Add models as they are implemented
+	if err := db.AutoMigrate(&models.ProductTemplate{}); err != nil {
+		cleanup()
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
 
 	return db, cleanup
 }
@@ -72,5 +74,21 @@ func TruncateTables(db *gorm.DB, tables ...string) {
 	for i := len(tables) - 1; i >= 0; i-- {
 		db.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tables[i]))
 	}
+}
+
+// CreateTemplateFixture creates a test product template
+func CreateTemplateFixture(db *gorm.DB, name string, attributes string) *models.ProductTemplate {
+	if attributes == "" {
+		// Default attributes
+		attributes = `[{"name":"Size","type":"ATTRIBUTE_TYPE_TEXT","required":true}]`
+	}
+
+	template := &models.ProductTemplate{
+		Name:       name,
+		Attributes: []byte(attributes),
+	}
+
+	db.Create(template)
+	return template
 }
 

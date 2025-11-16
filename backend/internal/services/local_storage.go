@@ -51,13 +51,13 @@ func (s *LocalStorage) Store(ctx context.Context, file io.Reader, filename strin
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
+		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
 
 	// Create file
 	dst, err := os.Create(fullPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file: %w", err)
+		return "", fmt.Errorf("failed to create file: %w", err)
 	}
 	defer dst.Close()
 
@@ -65,7 +65,7 @@ func (s *LocalStorage) Store(ctx context.Context, file io.Reader, filename strin
 	if _, err := io.Copy(dst, file); err != nil {
 		// Clean up partially written file
 		os.Remove(fullPath)
-		return nil, fmt.Errorf("failed to write file: %w", err)
+		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
 	// Return relative path from basePath
