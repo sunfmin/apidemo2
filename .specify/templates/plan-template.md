@@ -17,10 +17,10 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Language/Version**: Go 1.21+ (or specify version)  
+**Primary Dependencies**: net/http (or framework like Chi/Echo/Gin), pgx or database/sql driver  
+**Storage**: PostgreSQL (real database for all tests)  
+**Testing**: Go testing package with httptest, table-driven integration tests  
 **Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
 **Project Type**: [single/web/mobile - determines source structure]  
 **Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
@@ -31,7 +31,11 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- ✅ **Integration Testing First**: All tests use real PostgreSQL database (no mocking)
+- ✅ **Table-Driven Tests**: All tests follow table-driven pattern with test case structs
+- ✅ **Edge Case Coverage**: Tests include input validation, boundary conditions, auth errors, data state, database errors, HTTP specifics
+- ✅ **Real Database Fixtures**: Test data prepared via real database operations
+- ✅ **ServeHTTP Testing**: Endpoints tested through httptest.ResponseRecorder and actual HTTP handlers
 
 ## Project Structure
 

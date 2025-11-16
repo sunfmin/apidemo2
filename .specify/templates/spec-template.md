@@ -68,12 +68,40 @@
 ### Edge Cases
 
 <!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
+  ACTION REQUIRED: Edge case coverage is NON-NEGOTIABLE per constitution.
+  Each endpoint MUST test the following categories:
 -->
 
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
+**Input Validation**:
+- Empty strings, nil values, invalid formats
+- SQL injection attempts, XSS payloads
+- Oversized inputs, special characters
+
+**Boundary Conditions**:
+- Zero values, negative numbers, maximum values
+- Empty arrays/slices, nil pointers
+- Minimum/maximum field lengths
+
+**Authentication & Authorization**:
+- Missing authentication tokens
+- Expired tokens, invalid tokens
+- Insufficient permissions for operation
+
+**Data State**:
+- Non-existent resources (404 scenarios)
+- Duplicate entries (conflict scenarios)
+- Concurrent modification attempts
+
+**Database Errors**:
+- Constraint violations (unique, foreign key, check)
+- Transaction conflicts
+- Connection failures
+
+**HTTP Specifics**:
+- Wrong HTTP methods (GET when POST expected)
+- Missing required headers
+- Invalid Content-Type
+- Malformed JSON/request body
 
 ## Requirements *(mandatory)*
 

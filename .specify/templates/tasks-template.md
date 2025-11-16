@@ -8,7 +8,7 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: Integration tests are MANDATORY per constitution. All tests use real PostgreSQL database (no mocking), follow table-driven patterns, and cover comprehensive edge cases.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -20,10 +20,10 @@ description: "Task list template for feature implementation"
 
 ## Path Conventions
 
-- **Single project**: `src/`, `tests/` at repository root
-- **Web app**: `backend/src/`, `frontend/src/`
-- **Mobile**: `api/src/`, `ios/src/` or `android/src/`
-- Paths shown below assume single project - adjust based on plan.md structure
+- **Go project**: Root level for `main.go`, packages in subdirectories, `*_test.go` files alongside source
+- **Test organization**: Integration tests in `*_test.go` files (no separate `tests/` directory per Go convention)
+- **Test database**: Use real PostgreSQL, configure via environment variables
+- Paths shown below assume Go project structure - adjust based on plan.md
 
 <!-- 
   ============================================================================
@@ -48,9 +48,11 @@ description: "Task list template for feature implementation"
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+- [ ] T001 Initialize Go module with `go mod init`
+- [ ] T002 [P] Setup PostgreSQL connection and database configuration
+- [ ] T003 [P] Configure environment variables for database URLs
+- [ ] T004 [P] Setup database migration framework (golang-migrate, goose, or embedded)
+- [ ] T005 [P] Configure linting (golangci-lint) and formatting (gofmt, goimports)
 
 ---
 
@@ -60,14 +62,13 @@ description: "Task list template for feature implementation"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-Examples of foundational tasks (adjust based on your project):
-
-- [ ] T004 Setup database schema and migrations framework
-- [ ] T005 [P] Implement authentication/authorization framework
-- [ ] T006 [P] Setup API routing and middleware structure
-- [ ] T007 Create base models/entities that all stories depend on
-- [ ] T008 Configure error handling and logging infrastructure
-- [ ] T009 Setup environment configuration management
+- [ ] T006 Create initial database migrations for core tables
+- [ ] T007 [P] Setup HTTP router (Chi/Echo/Gin or net/http ServeMux)
+- [ ] T008 [P] Implement middleware: logging, recovery, CORS
+- [ ] T009 [P] Create database connection pool and health check
+- [ ] T010 [P] Setup test database helper (create/teardown or transaction rollback)
+- [ ] T011 Implement base error response types and JSON marshaling
+- [ ] T012 [P] Create fixture helper utilities for test database population
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -79,21 +80,27 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
+### Integration Tests for User Story 1 (MANDATORY) ⚠️
 
-> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
+> **CRITICAL: Write these tests FIRST, ensure they FAIL before implementation**
+> **All tests MUST use real PostgreSQL, table-driven pattern, and cover edge cases**
 
-- [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T010 [US1] Integration test for [endpoint] in [package]/[handler]_test.go
+  - Happy path test cases
+  - Edge cases: input validation, boundary conditions, auth errors
+  - Edge cases: data state (404, conflicts), database errors, HTTP specifics
+  - Use httptest.ResponseRecorder and real database fixtures
+  - Table-driven test structure with test case structs
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
-- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
-- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T016 [US1] Add validation and error handling
-- [ ] T017 [US1] Add logging for user story 1 operations
+- [ ] T011 [P] [US1] Create [Entity1] model/struct in [package]/[entity1].go
+- [ ] T012 [P] [US1] Create [Entity2] model/struct in [package]/[entity2].go
+- [ ] T013 [US1] Implement database repository in [package]/[repository].go (depends on T011, T012)
+- [ ] T014 [US1] Implement ServeHTTP handler in [package]/[handler].go
+- [ ] T015 [US1] Add request validation and error responses
+- [ ] T016 [US1] Add logging and error handling
+- [ ] T017 [US1] Create fixture helpers in [package]/fixtures_test.go
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -105,17 +112,18 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
+### Integration Tests for User Story 2 (MANDATORY) ⚠️
 
-- [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T018 [US2] Integration test for [endpoint] in [package]/[handler]_test.go
+  - Table-driven tests with comprehensive edge cases per constitution
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Create [Entity] model in src/models/[entity].py
-- [ ] T021 [US2] Implement [Service] in src/services/[service].py
-- [ ] T022 [US2] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
+- [ ] T019 [P] [US2] Create [Entity] model/struct in [package]/[entity].go
+- [ ] T020 [US2] Implement database operations in [package]/[repository].go
+- [ ] T021 [US2] Implement ServeHTTP handler in [package]/[handler].go
+- [ ] T022 [US2] Integrate with User Story 1 components (if needed)
+- [ ] T023 [US2] Create fixture helpers for test data
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -127,16 +135,17 @@ Examples of foundational tasks (adjust based on your project):
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
+### Integration Tests for User Story 3 (MANDATORY) ⚠️
 
-- [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T024 [US3] Integration test for [endpoint] in [package]/[handler]_test.go
+  - Table-driven tests with comprehensive edge cases per constitution
 
 ### Implementation for User Story 3
 
-- [ ] T026 [P] [US3] Create [Entity] model in src/models/[entity].py
-- [ ] T027 [US3] Implement [Service] in src/services/[service].py
-- [ ] T028 [US3] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T025 [P] [US3] Create [Entity] model/struct in [package]/[entity].go
+- [ ] T026 [US3] Implement database operations in [package]/[repository].go
+- [ ] T027 [US3] Implement ServeHTTP handler in [package]/[handler].go
+- [ ] T028 [US3] Create fixture helpers for test data
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -153,7 +162,7 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] TXXX [P] Documentation updates in docs/
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
+- [ ] TXXX Verify all integration tests pass with real database
 - [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
 
