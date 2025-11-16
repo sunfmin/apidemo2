@@ -8,7 +8,7 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Integration tests are MANDATORY per constitution. All tests use real PostgreSQL database via testcontainers-go (no mocking), follow table-driven patterns, use GORM for fixtures, use protobuf structs (NOT maps), verify OpenTracing instrumentation, and cover comprehensive edge cases.
+**Tests**: Integration tests are MANDATORY per constitution. All tests use real PostgreSQL database via testcontainers-go (no mocking), follow table-driven patterns, use GORM for fixtures, use protobuf structs (NOT maps), verify OpenTracing instrumentation, and cover comprehensive edge cases. Tests are conducted at HTTP layer only (httptest), which exercises the full stack: HTTP → Service → Repository → Database.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -23,8 +23,10 @@ description: "Task list template for feature implementation"
 - **Go project**: Root level for `main.go`, packages in subdirectories, `*_test.go` files alongside source
 - **Test organization**: Integration tests in `*_test.go` files (no separate `tests/` directory per Go convention)
 - **Test database**: Use testcontainers-go for automatic PostgreSQL container management
+- **Architecture**: Three-layer architecture (HTTP → Service → Repository)
+- **Service layer**: Business logic in Go interfaces with dependency injection
 - **Database access**: Use GORM for all database operations (models, queries, migrations)
-- **HTTP framework**: Use standard net/http with http.ServeMux (NO external routers)
+- **HTTP framework**: Use standard net/http with http.ServeMux (NO external routers, thin wrappers only)
 - **Tracing**: Use OpenTracing for all endpoint instrumentation
 - Paths shown below assume Go project structure - adjust based on plan.md
 
@@ -97,11 +99,12 @@ description: "Task list template for feature implementation"
 > **CRITICAL: Write these tests FIRST, ensure they FAIL before implementation**
 > **All tests MUST use real PostgreSQL (Docker), table-driven pattern, and cover edge cases**
 
-- [ ] T022 [US1] Integration test for [endpoint] in [package]/[handler]_test.go
+- [ ] T022 [US1] HTTP integration test for [endpoint] in [package]/[handler]_test.go
   - Happy path test cases
   - Edge cases: input validation, boundary conditions, auth errors
   - Edge cases: data state (404, conflicts), database errors, HTTP specifics
   - Use httptest.ResponseRecorder and real testcontainers PostgreSQL database fixtures
+  - Tests exercise full stack: HTTP → Service → Repository → Database
   - Use GORM for fixture data setup
   - Use database truncation for cleanup (defer truncateTables pattern)
   - Use protobuf structs (NOT maps) for request/response
@@ -113,12 +116,15 @@ description: "Task list template for feature implementation"
 - [ ] T023 [P] [US1] Create [Entity1] GORM model in [package]/[entity1].go
 - [ ] T024 [P] [US1] Create [Entity2] GORM model in [package]/[entity2].go
 - [ ] T025 [US1] Implement GORM database repository in [package]/[repository].go (depends on T023, T024)
-- [ ] T026 [US1] Implement ServeHTTP handler using net/http in [package]/[handler].go
-- [ ] T027 [US1] Add OpenTracing span creation in handler (extract/start span, set tags)
-- [ ] T028 [US1] Add child spans for database operations (instrument GORM queries)
-- [ ] T029 [US1] Add request validation and error responses with span error tagging
-- [ ] T030 [US1] Add logging and error handling
-- [ ] T031 [US1] Create fixture helpers using GORM in [package]/fixtures_test.go
+- [ ] T026 [P] [US1] Define service interface in [package]/service.go with business logic methods
+- [ ] T027 [US1] Implement service with dependency injection (db, logger, cache) in [package]/service_impl.go
+- [ ] T028 [US1] Implement business logic in service methods (validation, transactions, error handling)
+- [ ] T029 [US1] Implement ServeHTTP handler as thin wrapper in [package]/handler.go (delegates to service)
+- [ ] T030 [US1] Add OpenTracing span creation in handler (extract/start span, set tags)
+- [ ] T031 [US1] Add child spans for service calls (instrument business logic)
+- [ ] T032 [US1] Add HTTP request parsing and response formatting in handler
+- [ ] T033 [US1] Create fixture helpers using GORM in [package]/fixtures_test.go
+- [ ] T034 [US1] Create service constructor with dependency injection
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 

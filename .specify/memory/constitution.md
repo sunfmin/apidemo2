@@ -1,23 +1,22 @@
 <!--
 Sync Impact Report:
-- Version: 1.4.0 → 1.4.1 (PATCH bump - remove transaction rollback documentation, keep only database truncation)
+- Version: 1.5.0 → 1.5.1 (PATCH bump - clarify that HTTP integration tests cover full stack, no separate service tests)
 - Modified principles: None
-- Removed content:
-  - Strategy 2: Transaction Rollback (optional optimization) - removed entirely
-  - Transaction rollback code examples - removed
-  - References to dependency injection for testing - removed
+- Clarifications added:
+  - HTTP integration tests cover full stack (HTTP → Service → Repository)
+  - No need for separate service layer tests (would be redundant)
+  - Integration tests through HTTP layer test business logic thoroughly
 - Rationale:
-  - Simplify constitution to single clear approach
-  - Avoid confusing readers with multiple strategies
-  - Database truncation is sufficient for all cases
-  - Remove "optimization" complexity that most projects don't need
-  - Keep documentation focused and opinionated
+  - Avoid test duplication - HTTP integration tests already test services
+  - Simpler testing approach - one integration test per endpoint
+  - HTTP tests exercise the full stack including business logic
+  - Service layer architecture benefits remain (code reuse, DI, embeddability)
 - Impact:
-  - Constitution now shows only one way to do test isolation (database truncation)
-  - Clearer guidance - no decision fatigue
-  - Simpler to follow and implement
+  - Tests only at HTTP layer (using httptest + real database)
+  - Services still separated for reusability, just not tested separately
+  - Clearer testing guidance - no confusion about what to test
 - Templates requiring updates:
-  ✅ No template changes needed (already updated in v1.4.0)
+  ✅ .specify/templates/tasks-template.md (Remove separate service layer test tasks)
 -->
 
 
@@ -202,6 +201,218 @@ func ProductCreateHandler(w http.ResponseWriter, r *http.Request) {
     span.SetTag("http.status_code", http.StatusCreated)
 }
 ```
+
+### VIII. Service Layer Architecture (Dependency Injection)
+
+Business logic MUST be separated from HTTP transport using service interfaces:
+- Business logic MUST be implemented as Go interfaces (service layer)
+- Services MUST NOT depend on HTTP types (`http.Request`, `http.ResponseWriter`, `context.Context` is allowed)
+- HTTP handlers MUST be thin wrappers that call service methods
+- Services MUST accept all inputs as method parameters (no HTTP request parsing in services)
+- External dependencies (database, logger, cache, etc.) MUST be injected via constructor
+- Services MUST be exported and usable as normal Go packages
+- Service interfaces MUST be defined in the same package as implementation
+- Multiple applications MUST be able to share the same service instances
+
+**Rationale**: Separating business logic from HTTP transport enables code reuse across multiple contexts (HTTP APIs, gRPC services, CLI tools, background workers, embedded usage in other Go apps). Dependency injection allows applications to share expensive resources like database connection pools and caches. This architecture makes services testable without HTTP layer overhead and allows the package to be imported and used as a library in other Go applications.
+
+**Architecture Layers**:
+```
+HTTP Handler (thin) → Service Interface (business logic) → Repository (data access)
+```
+
+**Example Service Interface**:
+```go
+// Service interface - pure business logic, no HTTP dependencies
+type ProductService interface {
+    Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error)
+    Get(ctx context.Context, id string) (*pb.Product, error)
+    List(ctx context.Context, limit, offset int) ([]*pb.Product, error)
+    Update(ctx context.Context, id string, req *pb.ProductUpdateRequest) (*pb.Product, error)
+    Delete(ctx context.Context, id string) error
+}
+
+// Service implementation with dependency injection
+type productService struct {
+    db     *gorm.DB
+    logger Logger
+    cache  Cache
+}
+
+// Constructor with dependency injection
+func NewProductService(db *gorm.DB, logger Logger, cache Cache) ProductService {
+    return &productService{
+        db:     db,
+        logger: logger,
+        cache:  cache,
+    }
+}
+
+// Service method - pure business logic, no HTTP types
+func (s *productService) Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+    // Validate business rules
+    if req.Name == "" {
+        return nil, errors.New("product name required")
+    }
+    
+    // Create entity
+    product := &Product{
+        Name: req.Name,
+        SKU:  req.Sku,
+        Description: req.Description,
+    }
+    
+    // Persist with transaction
+    tx := s.db.WithContext(ctx).Begin()
+    defer tx.Rollback()
+    
+    if err := tx.Create(product).Error; err != nil {
+        s.logger.Error("failed to create product", err)
+        return nil, err
+    }
+    
+    if err := tx.Commit().Error; err != nil {
+        return nil, err
+    }
+    
+    // Convert to protobuf response
+    return &pb.Product{
+        Id:          product.ID,
+        Name:        product.Name,
+        Sku:         product.SKU,
+        Description: product.Description,
+    }, nil
+}
+```
+
+**HTTP Handler (Thin Wrapper)**:
+```go
+// HTTP handler delegates to service
+type ProductHandler struct {
+    service ProductService // Injected dependency
+}
+
+func NewProductHandler(service ProductService) *ProductHandler {
+    return &ProductHandler{service: service}
+}
+
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    // Extract trace span (HTTP concern)
+    span, ctx := opentracing.StartSpanFromContext(r.Context(), "POST /api/products")
+    defer span.Finish()
+    
+    // Parse HTTP request (HTTP concern)
+    var req pb.ProductCreateRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid request", 400)
+        return
+    }
+    
+    // Delegate to service (business logic)
+    product, err := h.service.Create(ctx, &req)
+    if err != nil {
+        span.SetTag("error", true)
+        http.Error(w, err.Error(), 500)
+        return
+    }
+    
+    // Format HTTP response (HTTP concern)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(product)
+}
+```
+
+**Usage in Other Go Applications**:
+```go
+// Application 1: HTTP API server
+func main() {
+    db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    logger := NewLogger()
+    cache := NewCache()
+    
+    // Create service with shared dependencies
+    productService := NewProductService(db, logger, cache)
+    
+    // Use in HTTP handlers
+    handler := NewProductHandler(productService)
+    http.HandleFunc("/api/products", handler.Create)
+    http.ListenAndServe(":8080", nil)
+}
+
+// Application 2: Background worker (shares same db/logger)
+func main() {
+    db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    logger := NewLogger()
+    cache := NewCache()
+    
+    // Share same service instances!
+    productService := NewProductService(db, logger, cache)
+    
+    // Use directly without HTTP layer
+    ctx := context.Background()
+    products, _ := productService.List(ctx, 100, 0)
+    for _, p := range products {
+        // Process products...
+    }
+}
+
+// Application 3: Embedded in larger application
+import "github.com/yourorg/apidemo2/services"
+
+func processOrders() {
+    // Import and use services directly
+    productSvc := services.NewProductService(sharedDB, sharedLogger, sharedCache)
+    
+    product, err := productSvc.Get(ctx, productID)
+    // Use product in your business logic
+}
+```
+
+**Testing Through HTTP Layer (Full Stack)**:
+```go
+// HTTP integration tests cover full stack: HTTP → Service → Repository
+func TestProductHandler_Create(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products")
+    
+    // Setup service with real dependencies
+    logger := NewLogger()
+    cache := NewCache()
+    service := NewProductService(db, logger, cache)
+    
+    // Setup HTTP handler
+    handler := NewProductHandler(service)
+    
+    // Create HTTP request
+    reqBody := &pb.ProductCreateRequest{
+        Name: "Test Product",
+        Sku:  "TEST-001",
+    }
+    body, _ := json.Marshal(reqBody)
+    req := httptest.NewRequest("POST", "/api/products", bytes.NewReader(body))
+    rec := httptest.NewRecorder()
+    
+    // Test through HTTP layer (exercises Service → Repository)
+    handler.Create(rec, req)
+    
+    // Assert HTTP response
+    if rec.Code != 200 {
+        t.Errorf("Expected 200, got %d", rec.Code)
+    }
+    
+    var product pb.Product
+    json.NewDecoder(rec.Body).Decode(&product)
+    if product.Name != reqBody.Name {
+        t.Errorf("Expected name %s, got %s", reqBody.Name, product.Name)
+    }
+    
+    // Note: This test covers HTTP parsing, service business logic, 
+    // and repository database operations - full integration!
+}
+```
+
+**Note**: We do NOT test services separately. HTTP integration tests already cover the full stack (HTTP → Service → Repository → Database). The service layer exists for code reusability and clean architecture, not for separate testing.
 
 ## Technology Stack
 
@@ -510,4 +721,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.4.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.5.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
