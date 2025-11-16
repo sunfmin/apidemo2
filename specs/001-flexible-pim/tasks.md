@@ -175,7 +175,7 @@
 
 ### Integration Tests for User Story 2 (MANDATORY) ⚠️
 
-- [x] T056 [US2] HTTP integration test for POST /api/v1/products in backend/tests/integration/product_test.go
+- [x] T056 [US2] HTTP integration test for POST /api/v1/products in backend/tests/integration/product_test.go (7 test cases)
   - Happy path: Create product with all attribute types filled
   - Edge case: Missing required attributes (400)
   - Edge case: Invalid attribute types (text in number field, etc.) (400)
@@ -191,7 +191,7 @@
   - Table-driven test structure
   - Cleanup: defer truncateTables(db, "products", "product_templates")
 
-- [ ] T057 [US2] HTTP integration test for GET /api/v1/products/{id} in backend/tests/integration/product_test.go
+- [x] T057 [US2] HTTP integration test for GET /api/v1/products/{id} in backend/tests/integration/product_test.go (3 test cases)
   - Happy path: Get product with all attributes
   - Edge case: Non-existent product ID (404)
   - Edge case: Include variants flag (variants array empty for now)
@@ -199,7 +199,7 @@
   - Verify protobuf comparison for attribute values
   - Table-driven test structure
 
-- [ ] T058 [US2] HTTP integration test for GET /api/v1/products in backend/tests/integration/product_test.go
+- [x] T058 [US2] HTTP integration test for GET /api/v1/products in backend/tests/integration/product_test.go (7 test cases)
   - Happy path: List products with pagination
   - Edge case: Filter by template ID
   - Edge case: Filter by status (active, inactive, draft)
@@ -211,7 +211,7 @@
   - Edge case: Pagination boundary conditions
   - Table-driven test structure
 
-- [ ] T059 [US2] HTTP integration test for PUT /api/v1/products/{id} in backend/tests/integration/product_test.go
+- [x] T059 [US2] HTTP integration test for PUT /api/v1/products/{id} in backend/tests/integration/product_test.go (5 test cases)
   - Happy path: Update product name, SKU, description, attribute values, status
   - Edge case: Non-existent product ID (404)
   - Edge case: Update SKU to duplicate (409)
@@ -222,14 +222,14 @@
   - Verify updated_at changes
   - Table-driven test structure
 
-- [ ] T060 [US2] HTTP integration test for DELETE /api/v1/products/{id} in backend/tests/integration/product_test.go
+- [x] T060 [US2] HTTP integration test for DELETE /api/v1/products/{id} in backend/tests/integration/product_test.go (3 test cases)
   - Happy path: Delete product with no variants
   - Edge case: Non-existent product ID (404)
   - Edge case: Delete product with variants (cascade or block - verify expected behavior)
   - Edge case: Verify associated media is handled (for future US4)
   - Table-driven test structure
 
-- [ ] T061 [US2] HTTP integration test for POST /api/v1/products/bulk/status in backend/tests/integration/product_test.go
+- [x] T061 [US2] HTTP integration test for POST /api/v1/products/bulk/status in backend/tests/integration/product_test.go (4 test cases)
   - Happy path: Update status for multiple products
   - Edge case: Empty product_ids array (400)
   - Edge case: Some products not found (partial success, return failed IDs)

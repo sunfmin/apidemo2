@@ -161,7 +161,7 @@ func (s *productService) Get(ctx context.Context, req *pb.GetProductRequest) (*p
 
 // List retrieves products with pagination, filtering, and sorting
 func (s *productService) List(ctx context.Context, req *pb.ListProductsRequest) ([]*pb.Product, *pb.PaginationResponse, error) {
-	query := s.db.WithContext(ctx).Model(&models.Product{}).Preload("Template")
+	query := s.db.WithContext(ctx).Model(&models.Product{}).Preload("Template").Preload("Pricing").Preload("Inventories")
 
 	// Apply filters
 	if req.TemplateId != "" {
@@ -308,7 +308,7 @@ func (s *productService) Update(ctx context.Context, req *pb.UpdateProductReques
 	return s.modelToProto(&product, product.Template.Name)
 }
 
-// Delete deletes a product
+// Delete deletes a product and its associated pricing, inventory, and optionally variants
 func (s *productService) Delete(ctx context.Context, req *pb.DeleteProductRequest) (*pb.DeleteProductResponse, error) {
 	if req.Id == "" {
 		return nil, errors.New("product ID is required")
@@ -316,27 +316,48 @@ func (s *productService) Delete(ctx context.Context, req *pb.DeleteProductReques
 
 	// Check if product exists
 	var product models.Product
-	if err := s.db.WithContext(ctx).First(&product, "id = ?", req.Id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Preload("Variants").First(&product, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("product not found: %s", req.Id)
 		}
 		return nil, err
 	}
 
-	// Count variants
-	var variantCount int64
-	s.db.Model(&models.ProductVariant{}).Where("product_id = ?", req.Id).Count(&variantCount)
+	// Use transaction to delete product, pricing, inventory, and variants atomically
+	tx := s.db.WithContext(ctx).Begin()
+	defer tx.Rollback()
 
-	// Delete product (variants will cascade if delete_variants = true)
-	if err := s.db.WithContext(ctx).Delete(&product).Error; err != nil {
+	// Delete variant pricing and inventory first (if any variants exist)
+	if len(product.Variants) > 0 {
+		for _, variant := range product.Variants {
+			tx.Where("variant_id = ?", variant.ID).Delete(&models.VariantPricing{})
+			tx.Where("variant_id = ?", variant.ID).Delete(&models.VariantInventory{})
+		}
+		tx.Where("product_id = ?", req.Id).Delete(&models.ProductVariant{})
+	}
+
+	// Delete product pricing records
+	if err := tx.Where("product_id = ?", req.Id).Delete(&models.ProductPricing{}).Error; err != nil {
+		return nil, fmt.Errorf("failed to delete pricing: %w", err)
+	}
+
+	// Delete product inventory records (all locations)
+	if err := tx.Where("product_id = ?", req.Id).Delete(&models.ProductInventory{}).Error; err != nil {
+		return nil, fmt.Errorf("failed to delete inventory: %w", err)
+	}
+
+	// Finally delete the product itself
+	if err := tx.Delete(&product).Error; err != nil {
 		return nil, err
 	}
 
-	// TODO: Actually delete variants if req.DeleteVariants = true
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
 
 	return &pb.DeleteProductResponse{
 		Success:         true,
-		VariantsDeleted: int32(variantCount),
+		VariantsDeleted: int32(len(product.Variants)),
 	}, nil
 }
 
