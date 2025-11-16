@@ -427,7 +427,7 @@
 
 ### Implementation for User Story 4
 
-- [ ] T119 [P] [US4] Create MediaFile GORM model in backend/internal/models/media.go (ID, EntityType, EntityID, AttributeName, FileType, MimeType, FileName, StoragePath, ThumbnailPath, FileSize, Width, Height, Duration, DisplayOrder, CreatedAt)
+- [x] T119 [P] [US4] Create MediaFile GORM model in backend/internal/models/product.go (ID, EntityType, EntityID, AttributeName, FileType, MimeType, FileName, FilePath, FileSize, Width, Height, Duration, DisplayOrder, timestamps)
 - [ ] T120 [US4] Define MediaService interface in backend/internal/services/media_service.go (Upload, UploadBulk, Get, List, Update, Delete, Reorder, GetURL, GetThumbnailURL methods)
 - [ ] T121 [US4] Implement MediaService with dependency injection in backend/internal/services/media_service.go (inject *gorm.DB, MediaStorage, ImageProcessor, VideoProcessor)
 - [ ] T122 [US4] Implement file validation (type by magic bytes, size limits) in backend/internal/services/media_service.go
