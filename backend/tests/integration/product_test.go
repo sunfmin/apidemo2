@@ -38,14 +38,15 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "successful_creation_all_attribute_types",
 			request: &pb.CreateProductRequest{
-				TemplateId: "", // Will be set in test loop
-				Name:       "Laptop Pro",
-				Sku:        "LAPTOP-001",
-				Description: "High-performance laptop",
+				TemplateId:       "", // Will be set in test loop
+				Name:             "Laptop Pro",
+				Sku:              "LAPTOP-001",
+				Description:      "High-performance laptop",
+				InitialListPrice: 1299.99,
+				InitialSalePrice: 0,
+				InitialStock:     100,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Laptop Pro"},
-					"Price":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_NUMBER, NumberValue: 1299.99},
-					"In Stock":     {Type: pb.AttributeType_ATTRIBUTE_TYPE_BOOLEAN, BooleanValue: true},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Silver"}},
 					"Specs":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_MAP, MapValue: map[string]string{"CPU": "Intel i7", "RAM": "16GB"}},
 				},
@@ -57,12 +58,13 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "empty_product_name",
 			request: &pb.CreateProductRequest{
-				TemplateId: "", // Will be set in test loop
-				Name:       "",
-				Sku:        "TEST-001",
+				TemplateId:   "", // Will be set in test loop
+				Name:         "",
+				Sku:          "TEST-001",
+				InitialListPrice: 99.99,
+				InitialStock:     50,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
-					"Price":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_NUMBER, NumberValue: 99.99},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
 				},
 			},
@@ -72,12 +74,13 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "duplicate_sku",
 			request: &pb.CreateProductRequest{
-				TemplateId: "", // Will be set in test loop
-				Name:       "Duplicate Product",
-				Sku:        "DUPLICATE-SKU",
+				TemplateId:   "", // Will be set in test loop
+				Name:         "Duplicate Product",
+				Sku:          "DUPLICATE-SKU",
+				InitialListPrice: 99.99,
+				InitialStock:     50,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
-					"Price":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_NUMBER, NumberValue: 99.99},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
 				},
 			},
@@ -98,12 +101,14 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "missing_required_attributes",
 			request: &pb.CreateProductRequest{
-				TemplateId: "", // Will be set in test loop
-				Name:       "Incomplete Product",
-				Sku:        "TEST-003",
+				TemplateId:   "", // Will be set in test loop
+				Name:         "Incomplete Product",
+				Sku:          "TEST-003",
+				InitialListPrice: 99.99,
+				InitialStock: 10,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
-					// Missing "Price" (required) and "Color" (required)
+					// Missing "Color" (required from template)
 				},
 			},
 			expectedStatus: http.StatusBadRequest,
@@ -112,12 +117,13 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "list_value_not_in_options",
 			request: &pb.CreateProductRequest{
-				TemplateId: "", // Will be set in test loop
-				Name:       "Invalid Color Product",
-				Sku:        "TEST-004",
+				TemplateId:   "", // Will be set in test loop
+				Name:         "Invalid Color Product",
+				Sku:          "TEST-004",
+				InitialListPrice: 99.99,
+				InitialStock: 25,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
-					"Price":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_NUMBER, NumberValue: 99.99},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Red"}}, // Red not in options
 				},
 			},
@@ -127,12 +133,13 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "sku_too_long",
 			request: &pb.CreateProductRequest{
-				TemplateId: "", // Will be set in test loop
-				Name:       "Test Product",
-				Sku:        "THIS-IS-A-VERY-LONG-SKU-THAT-EXCEEDS-THE-MAXIMUM-LENGTH-OF-100-CHARACTERS-AND-SHOULD-BE-REJECTED-BY-VALIDATION",
+				TemplateId:   "", // Will be set in test loop
+				Name:         "Test Product",
+				Sku:          "THIS-IS-A-VERY-LONG-SKU-THAT-EXCEEDS-THE-MAXIMUM-LENGTH-OF-100-CHARACTERS-AND-SHOULD-BE-REJECTED-BY-VALIDATION",
+				InitialListPrice: 99.99,
+				InitialStock: 10,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
-					"Price":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_NUMBER, NumberValue: 99.99},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
 				},
 			},
@@ -148,8 +155,6 @@ func TestProductHandler_Create(t *testing.T) {
 			if tc.name != "invalid_template_reference" {
 				template = testutil.CreateTemplateFixture(db, "Electronics", `[
 					{"name":"Product Name","type":"text","required":true},
-					{"name":"Price","type":"number","required":true},
-					{"name":"In Stock","type":"boolean","required":false},
 					{"name":"Color","type":"list","required":true,"options":["Black","White","Silver"]},
 					{"name":"Specs","type":"map","required":false}
 				]`)
@@ -224,7 +229,14 @@ func TestProductHandler_Create(t *testing.T) {
 						Name:            tc.request.Name,
 						Sku:             tc.request.Sku,
 						Description:     tc.request.Description,
-						AttributeValues: expectedAttributeValues,          // Expected attributes with Type field
+						ListPrice:       tc.request.InitialListPrice,
+						SalePrice:       tc.request.InitialSalePrice,
+						EffectivePrice:  tc.request.InitialListPrice, // No sale price set
+						Currency:        "USD",
+						TotalStock:      tc.request.InitialStock,
+						AvailableStock:  tc.request.InitialStock, // Initially no reserved stock
+						ReservedStock:   0,
+						AttributeValues: expectedAttributeValues, // Expected attributes with Type field
 						Status:          tc.request.Status,
 						CreatedAt:       response.Product.CreatedAt,       // Use actual timestamp
 						UpdatedAt:       response.Product.UpdatedAt,       // Use actual timestamp

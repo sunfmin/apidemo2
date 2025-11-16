@@ -9,7 +9,8 @@ import "media.proto";
 import "variant.proto";
 import "google/protobuf/timestamp.proto";
 
-// Product represents a product instance
+// Product represents a product master data (relatively static information)
+// Pricing and inventory are in separate tables/APIs for independent management
 message Product {
   string id = 1;
   string template_id = 2;
@@ -17,12 +18,23 @@ message Product {
   string name = 4;
   string sku = 5;
   string description = 6;
-  map<string, AttributeValue> attribute_values = 7; // Attribute name -> value
+  map<string, AttributeValue> attribute_values = 7; // Template-specific flexible attributes
   ProductStatus status = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   int32 variant_count = 11; // Number of variants for this product
   repeated string primary_image_urls = 12; // URLs of primary images (for list display)
+  
+  // Denormalized from ProductPricing (read-only, manage via pricing API)
+  double list_price = 13; // Current list price
+  double sale_price = 14; // Current sale price (0 if not on sale)
+  double effective_price = 15; // sale_price if > 0, otherwise list_price
+  string currency = 16;
+  
+  // Denormalized from ProductInventory (read-only, manage via inventory API)
+  int32 total_stock = 17; // Sum across all locations
+  int32 available_stock = 18; // Total available (on_hand - reserved across locations)
+  int32 reserved_stock = 19; // Total reserved across locations
 }
 
 // CreateProductRequest
@@ -31,8 +43,18 @@ message CreateProductRequest {
   string name = 2; // Required, 1-255 characters
   string sku = 3; // Required, 1-100 characters, unique, alphanumeric + dash/underscore
   string description = 4; // Optional
-  map<string, AttributeValue> attribute_values = 5; // Required attributes from template must be present
+  map<string, AttributeValue> attribute_values = 5; // Template-specific attributes (required attributes from template must be present)
   ProductStatus status = 6; // Optional, defaults to DRAFT
+  
+  // Initial pricing (creates ProductPricing record)
+  double initial_list_price = 7; // Required, must be >= 0
+  double initial_sale_price = 8; // Optional, 0 if not on sale
+  double initial_cost = 9; // Optional, for margin tracking
+  string currency = 10; // Optional, defaults to "USD"
+  
+  // Initial inventory (creates ProductInventory record for default location)
+  int32 initial_stock = 11; // Required, must be >= 0
+  string initial_location = 12; // Optional, defaults to "default"
 }
 
 // CreateProductResponse
@@ -74,13 +96,14 @@ message ListProductsResponse {
   PaginationResponse pagination = 2;
 }
 
-// UpdateProductRequest
+// UpdateProductRequest - for updating product master data only
+// Use UpdateInventoryRequest (in inventory.proto) to update price/stock
 message UpdateProductRequest {
   string id = 1; // Required, UUID
   string name = 2; // Optional
   string sku = 3; // Optional, must be unique if provided
   string description = 4; // Optional
-  map<string, AttributeValue> attribute_values = 5; // Optional, updates specified attributes
+  map<string, AttributeValue> attribute_values = 5; // Optional, updates specified template attributes
   ProductStatus status = 6; // Optional
 }
 

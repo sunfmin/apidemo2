@@ -20,6 +20,11 @@ message ProductVariant {
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
   repeated string primary_image_urls = 10; // URLs of primary images
+  
+  // Inventory information (from VariantInventory, denormalized for display)
+  double price = 11; // Variant-specific price
+  int32 stock_quantity = 12; // Variant-specific stock
+  int32 available_quantity = 13; // Available stock (stock - reserved)
 }
 
 // CreateVariantRequest
@@ -27,7 +32,11 @@ message CreateVariantRequest {
   string product_id = 1; // Required, must reference existing product
   string name = 2; // Required, 1-255 characters
   string sku = 3; // Required, 1-100 characters, unique, alphanumeric + dash/underscore
-  map<string, AttributeValue> attribute_values = 4; // Optional, override specific attributes
+  map<string, AttributeValue> attribute_values = 4; // Optional, override specific template attributes
+  
+  // Initial inventory for variant
+  double initial_price = 5; // Required, must be >= 0
+  int32 initial_stock = 6; // Required, must be >= 0
 }
 
 // CreateVariantResponse

@@ -50,6 +50,12 @@ func main() {
 	if err := db.AutoMigrate(
 		&models.ProductTemplate{},
 		&models.Product{},
+		&models.ProductPricing{},
+		&models.ProductInventory{},
+		&models.ProductVariant{},
+		&models.VariantPricing{},
+		&models.VariantInventory{},
+		&models.MediaFile{},
 	); err != nil {
 		log.Fatalf("❌ Failed to run migrations: %v", err)
 	}

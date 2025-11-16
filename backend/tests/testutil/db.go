@@ -62,7 +62,11 @@ func SetupTestDB(t *testing.T) (*gorm.DB, func()) {
 	if err := db.AutoMigrate(
 		&models.ProductTemplate{},
 		&models.Product{},
+		&models.ProductPricing{},
+		&models.ProductInventory{},
 		&models.ProductVariant{},
+		&models.VariantPricing{},
+		&models.VariantInventory{},
 		&models.MediaFile{},
 	); err != nil {
 		cleanup()

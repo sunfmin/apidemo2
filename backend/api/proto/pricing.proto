@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package pim.v1;
+
+option go_package = "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1;pimv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ProductPricing represents pricing information for a product
+// Separated from inventory for independent pricing management
+message ProductPricing {
+  string id = 1;
+  string product_id = 2; // Reference to Product
+  double list_price = 3; // Regular/list price
+  double sale_price = 4; // Sale price (optional, 0 if not on sale)
+  double cost = 5; // Cost/wholesale price (for margin calculation)
+  string currency = 6; // e.g., "USD", "EUR", "JPY"
+  google.protobuf.Timestamp valid_from = 7; // Price effective date
+  google.protobuf.Timestamp valid_to = 8; // Price expiration (optional)
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// VariantPricing represents pricing information for a product variant
+message VariantPricing {
+  string id = 1;
+  string variant_id = 2; // Reference to ProductVariant
+  double list_price = 3; // Variant list price (overrides product price)
+  double sale_price = 4; // Variant sale price
+  double cost = 5; // Variant cost
+  google.protobuf.Timestamp valid_from = 6;
+  google.protobuf.Timestamp valid_to = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// UpdatePricingRequest - for updating product pricing separately
+message UpdatePricingRequest {
+  string product_id = 1; // Required
+  double list_price = 2; // Optional
+  double sale_price = 3; // Optional, 0 to clear sale
+  double cost = 4; // Optional
+  string currency = 5; // Optional
+  google.protobuf.Timestamp valid_from = 6; // Optional
+  google.protobuf.Timestamp valid_to = 7; // Optional
+}
+
+// UpdatePricingResponse
+message UpdatePricingResponse {
+  ProductPricing pricing = 1;
+}
+
+// UpdateVariantPricingRequest
+message UpdateVariantPricingRequest {
+  string variant_id = 1; // Required
+  double list_price = 2; // Optional
+  double sale_price = 3; // Optional
+  double cost = 4; // Optional
+}
+
+// UpdateVariantPricingResponse
+message UpdateVariantPricingResponse {
+  VariantPricing pricing = 1;
+}
+

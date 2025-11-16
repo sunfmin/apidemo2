@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/gorm"
@@ -61,7 +62,7 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 		return nil, fmt.Errorf("failed to serialize attributes: %w", err)
 	}
 
-	// Create product model
+	// Create product model (master data only, no price/stock)
 	product := &models.Product{
 		TemplateID:      req.TemplateId,
 		Name:            req.Name,
@@ -71,13 +72,56 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 		Status:          s.protoStatusToString(req.Status),
 	}
 
-	// Save to database
-	if err := s.db.WithContext(ctx).Create(product).Error; err != nil {
+	// Use transaction to create product, pricing, and inventory atomically
+	tx := s.db.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	// Save product (master data)
+	if err := tx.Create(product).Error; err != nil {
 		if strings.Contains(err.Error(), "duplicate key") && strings.Contains(err.Error(), "sku") {
 			return nil, fmt.Errorf("SKU already exists: %s", req.Sku)
 		}
 		return nil, err
 	}
+
+	// Create pricing record (Marketing domain)
+	currency := req.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+	pricing := &models.ProductPricing{
+		ProductID: product.ID,
+		ListPrice: req.InitialListPrice,
+		SalePrice: req.InitialSalePrice,
+		Cost:      req.InitialCost,
+		Currency:  currency,
+		ValidFrom: time.Now(),
+	}
+	if err := tx.Create(pricing).Error; err != nil {
+		return nil, fmt.Errorf("failed to create pricing: %w", err)
+	}
+
+	// Create inventory record (Operations domain)
+	location := req.InitialLocation
+	if location == "" {
+		location = "default"
+	}
+	inventory := &models.ProductInventory{
+		ProductID:      product.ID,
+		LocationID:     location,
+		OnHandQuantity: req.InitialStock,
+	}
+	if err := tx.Create(inventory).Error; err != nil {
+		return nil, fmt.Errorf("failed to create inventory: %w", err)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	// Load product with pricing and inventory for response
+	product.Pricing = pricing
+	product.Inventories = []models.ProductInventory{*inventory}
 
 	// Convert to protobuf response
 	return s.modelToProto(product, template.Name)
@@ -90,7 +134,7 @@ func (s *productService) Get(ctx context.Context, req *pb.GetProductRequest) (*p
 	}
 
 	var product models.Product
-	query := s.db.WithContext(ctx).Preload("Template")
+	query := s.db.WithContext(ctx).Preload("Template").Preload("Pricing").Preload("Inventories")
 
 	if err := query.First(&product, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -225,6 +269,9 @@ func (s *productService) Update(ctx context.Context, req *pb.UpdateProductReques
 	if req.Description != "" {
 		updates["description"] = req.Description
 	}
+
+	// Note: Price and stock are now in ProductInventory table
+	// Use separate inventory update API to modify price/stock
 
 	if req.Status != pb.ProductStatus_PRODUCT_STATUS_UNSPECIFIED {
 		updates["status"] = s.protoStatusToString(req.Status)
@@ -367,6 +414,18 @@ func (s *productService) validateCreateRequest(req *pb.CreateProductRequest) err
 			!(char >= '0' && char <= '9') && char != '-' && char != '_' {
 			return fmt.Errorf("SKU contains invalid character: %c", char)
 		}
+	}
+
+	if req.InitialListPrice < 0 {
+		return errors.New("initial_list_price must be >= 0")
+	}
+
+	if req.InitialSalePrice < 0 {
+		return errors.New("initial_sale_price must be >= 0")
+	}
+
+	if req.InitialStock < 0 {
+		return errors.New("initial_stock must be >= 0")
 	}
 
 	return nil
@@ -535,19 +594,48 @@ func (s *productService) modelToProto(model *models.Product, templateName string
 		pbAttrs[name] = pbAttr
 	}
 
+	// Get pricing information (denormalized for display)
+	var listPrice, salePrice, effectivePrice float64
+	var currency string = "USD"
+	if model.Pricing != nil {
+		listPrice = model.Pricing.ListPrice
+		salePrice = model.Pricing.SalePrice
+		currency = model.Pricing.Currency
+		if salePrice > 0 {
+			effectivePrice = salePrice
+		} else {
+			effectivePrice = listPrice
+		}
+	}
+
+	// Get inventory information (denormalized, aggregated across locations)
+	var totalStock, availableStock, reservedStock int32
+	for _, inv := range model.Inventories {
+		totalStock += inv.OnHandQuantity
+		reservedStock += inv.ReservedQuantity
+	}
+	availableStock = totalStock - reservedStock
+
 	return &pb.Product{
-		Id:              model.ID,
-		TemplateId:      model.TemplateID,
-		TemplateName:    templateName,
-		Name:            model.Name,
-		Sku:             model.SKU,
-		Description:     model.Description,
-		AttributeValues: pbAttrs,
-		Status:          s.stringToProtoStatus(model.Status),
-		CreatedAt:       timestamppb.New(model.CreatedAt),
-		UpdatedAt:       timestamppb.New(model.UpdatedAt),
-		VariantCount:    0, // TODO: Count variants
+		Id:               model.ID,
+		TemplateId:       model.TemplateID,
+		TemplateName:     templateName,
+		Name:             model.Name,
+		Sku:              model.SKU,
+		Description:      model.Description,
+		AttributeValues:  pbAttrs,
+		Status:           s.stringToProtoStatus(model.Status),
+		CreatedAt:        timestamppb.New(model.CreatedAt),
+		UpdatedAt:        timestamppb.New(model.UpdatedAt),
+		VariantCount:     0, // TODO: Count variants
 		PrimaryImageUrls: []string{}, // TODO: Get primary images
+		ListPrice:        listPrice,
+		SalePrice:        salePrice,
+		EffectivePrice:   effectivePrice,
+		Currency:         currency,
+		TotalStock:       totalStock,
+		AvailableStock:   availableStock,
+		ReservedStock:    reservedStock,
 	}, nil
 }
 
