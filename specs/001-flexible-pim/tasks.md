@@ -274,7 +274,7 @@
 
 ### Integration Tests for User Story 3 (MANDATORY) ⚠️
 
-- [ ] T085 [US3] HTTP integration test for POST /api/v1/products/{product_id}/variants in backend/tests/integration/variant_test.go
+- [x] T085 [US3] HTTP integration test for POST /api/v1/products/{product_id}/variants in backend/tests/integration/variant_test.go
   - Happy path: Create variant with some attribute overrides
   - Edge case: Non-existent product ID (404)
   - Edge case: Duplicate variant SKU (409)
@@ -333,24 +333,24 @@
 ### Implementation for User Story 3
 
 - [ ] T091 [P] [US3] Create ProductVariant GORM model in backend/internal/models/variant.go (ID, ProductID, Name, SKU, AttributeValues JSONB, timestamps)
-- [ ] T092 [US3] Define VariantService interface in backend/internal/services/variant_service.go (Create, Get, List, Update, Delete, BulkCreate methods)
-- [ ] T093 [US3] Implement VariantService with dependency injection in backend/internal/services/variant_service.go (inject *gorm.DB)
-- [ ] T094 [US3] Implement Create method with validation (SKU unique, product exists) in backend/internal/services/variant_service.go
-- [ ] T095 [US3] Implement attribute merging logic (parent attributes + overrides → effective attributes) in backend/internal/services/variant_service.go
-- [ ] T096 [US3] Implement Get method with attribute merging in backend/internal/services/variant_service.go
-- [ ] T097 [US3] Implement List method with filters, pagination, sorting in backend/internal/services/variant_service.go
-- [ ] T098 [US3] Implement Update method with validation and conflict checking in backend/internal/services/variant_service.go
-- [ ] T099 [US3] Implement Delete method in backend/internal/services/variant_service.go
+- [x] T092 [US3] Define VariantService interface in backend/internal/services/variant_service.go (Create, Get, List, Update, Delete, BulkCreate methods)
+- [x] T093 [US3] Implement VariantService with dependency injection in backend/internal/services/variant_service.go (inject *gorm.DB)
+- [x] T094 [US3] Implement Create method with validation (SKU unique, product exists) in backend/internal/services/variant_service.go
+- [x] T095 [US3] Implement attribute merging logic (parent attributes + overrides → effective attributes) in backend/internal/services/variant_service.go
+- [x] T096 [US3] Implement Get method with attribute merging in backend/internal/services/variant_service.go
+- [x] T097 [US3] Implement List method with filters, pagination, sorting in backend/internal/services/variant_service.go
+- [x] T098 [US3] Implement Update method with validation and conflict checking in backend/internal/services/variant_service.go
+- [x] T099 [US3] Implement Delete method in backend/internal/services/variant_service.go
 - [ ] T100 [US3] Implement BulkCreate method with transaction and error tracking in backend/internal/services/variant_service.go
-- [ ] T101 [US3] Create conversion helpers (GORM model ↔ protobuf ProductVariant) in backend/internal/services/variant_service.go
-- [ ] T102 [US3] Create VariantHandler struct in backend/internal/handlers/variant_handler.go (inject VariantService)
-- [ ] T103 [US3] Implement Create handler (POST /api/v1/products/{product_id}/variants) with OpenTracing spans in backend/internal/handlers/variant_handler.go
-- [ ] T104 [US3] Implement Get handler (GET /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
-- [ ] T105 [US3] Implement List handler (GET /api/v1/products/{product_id}/variants) in backend/internal/handlers/variant_handler.go
-- [ ] T106 [US3] Implement Update handler (PUT /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
-- [ ] T107 [US3] Implement Delete handler (DELETE /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
+- [x] T101 [US3] Create conversion helpers (GORM model ↔ protobuf ProductVariant) in backend/internal/services/variant_service.go
+- [x] T102 [US3] Create VariantHandler struct in backend/internal/handlers/variant_handler.go (inject VariantService)
+- [x] T103 [US3] Implement Create handler (POST /api/v1/products/{product_id}/variants) with OpenTracing spans in backend/internal/handlers/variant_handler.go
+- [x] T104 [US3] Implement Get handler (GET /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
+- [x] T105 [US3] Implement List handler (GET /api/v1/products/{product_id}/variants) in backend/internal/handlers/variant_handler.go
+- [x] T106 [US3] Implement Update handler (PUT /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
+- [x] T107 [US3] Implement Delete handler (DELETE /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
 - [ ] T108 [US3] Implement BulkCreate handler (POST /api/v1/products/{product_id}/variants/bulk) in backend/internal/handlers/variant_handler.go
-- [ ] T109 [US3] Register variant routes in backend/cmd/server/main.go
+- [x] T109 [US3] Register variant routes in backend/cmd/server/main.go
 - [ ] T110 [US3] Create fixture helper for variants in backend/tests/testutil/fixtures.go (createVariantFixture function)
 - [ ] T111 [US3] Run all US3 integration tests and verify they pass
 

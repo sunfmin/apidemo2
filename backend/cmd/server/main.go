@@ -64,11 +64,13 @@ func main() {
 	// Initialize services
 	templateService := services.NewTemplateService(db)
 	productService := services.NewProductService(db)
+	variantService := services.NewVariantService(db)
 	log.Println("✅ Services initialized")
 
 	// Initialize handlers
 	templateHandler := handlers.NewTemplateHandler(templateService)
 	productHandler := handlers.NewProductHandler(productService)
+	variantHandler := handlers.NewVariantHandler(variantService)
 	log.Println("✅ Handlers initialized")
 
 	// Create HTTP router
@@ -143,9 +145,62 @@ func main() {
 		}
 	})
 
+	// Variant routes - Item endpoints
+	mux.HandleFunc("/api/v1/variants/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			variantHandler.Get(w, r)
+		case http.MethodPut:
+			variantHandler.Update(w, r)
+		case http.MethodDelete:
+			variantHandler.Delete(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Variant routes - Product-scoped endpoints
+	// Note: This needs careful routing to distinguish from /api/v1/products/{id}
+	// Pattern: /api/v1/products/{product_id}/variants
+	mux.HandleFunc("/api/v1/products/", func(w http.ResponseWriter, r *http.Request) {
+		// Check if this is a variant-related request
+		if strings.HasSuffix(r.URL.Path, "/variants") {
+			if r.Method == http.MethodGet {
+				variantHandler.List(w, r)
+				return
+			} else if r.Method == http.MethodPost {
+				variantHandler.Create(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Check for bulk endpoints first
+		if strings.HasPrefix(r.URL.Path, "/api/v1/products/bulk/status") {
+			if r.Method == http.MethodPost {
+				productHandler.BulkUpdateStatus(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Individual product endpoints
+		switch r.Method {
+		case http.MethodGet:
+			productHandler.Get(w, r)
+		case http.MethodPut:
+			productHandler.Update(w, r)
+		case http.MethodDelete:
+			productHandler.Delete(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	log.Println("✅ Routes registered")
 
-	// TODO: Register variant routes
 	// TODO: Register media routes
 
 	// Apply middleware chain
