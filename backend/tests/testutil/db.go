@@ -59,7 +59,12 @@ func SetupTestDB(t *testing.T) (*gorm.DB, func()) {
 
 	// Run AutoMigrate for all models
 	// Note: Add models as they are implemented
-	if err := db.AutoMigrate(&models.ProductTemplate{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.ProductTemplate{},
+		&models.Product{},
+		&models.ProductVariant{},
+		&models.MediaFile{},
+	); err != nil {
 		cleanup()
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
@@ -90,5 +95,25 @@ func CreateTemplateFixture(db *gorm.DB, name string, attributes string) *models.
 
 	db.Create(template)
 	return template
+}
+
+// CreateProductFixture creates a test product
+func CreateProductFixture(db *gorm.DB, templateID string, name string, sku string, attributeValues string) *models.Product {
+	if attributeValues == "" {
+		// Default attribute values
+		attributeValues = `{}`
+	}
+
+	product := &models.Product{
+		TemplateID:      templateID,
+		Name:            name,
+		SKU:             sku,
+		Description:     "Test product description",
+		AttributeValues: []byte(attributeValues),
+		Status:          "active",
+	}
+
+	db.Create(product)
+	return product
 }
 

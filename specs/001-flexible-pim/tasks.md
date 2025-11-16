@@ -175,7 +175,7 @@
 
 ### Integration Tests for User Story 2 (MANDATORY) ⚠️
 
-- [ ] T056 [US2] HTTP integration test for POST /api/v1/products in backend/tests/integration/product_test.go
+- [x] T056 [US2] HTTP integration test for POST /api/v1/products in backend/tests/integration/product_test.go
   - Happy path: Create product with all attribute types filled
   - Edge case: Missing required attributes (400)
   - Edge case: Invalid attribute types (text in number field, etc.) (400)
@@ -238,29 +238,29 @@
 
 ### Implementation for User Story 2
 
-- [ ] T062 [P] [US2] Create Product GORM model in backend/internal/models/product.go (ID, TemplateID, Name, SKU, Description, AttributeValues JSONB, Status, timestamps)
-- [ ] T063 [P] [US2] Create AttributeValue struct for JSONB in backend/internal/models/product.go (Type, Value interface{})
-- [ ] T064 [US2] Define ProductService interface in backend/internal/services/product_service.go (Create, Get, List, Update, Delete, BulkUpdateStatus methods)
-- [ ] T065 [US2] Implement ProductService with dependency injection in backend/internal/services/product_service.go (inject *gorm.DB)
-- [ ] T066 [US2] Implement Create method with validation (required attributes, type checking, template exists) in backend/internal/services/product_service.go
-- [ ] T067 [US2] Implement attribute validation logic (check required fields, validate types, check list options) in backend/internal/services/product_service.go
-- [ ] T068 [US2] Implement Get method with optional includes (variants, media) in backend/internal/services/product_service.go
-- [ ] T069 [US2] Implement List method with filters (template, status, search, attribute filters), pagination, sorting in backend/internal/services/product_service.go
-- [ ] T070 [US2] Implement JSONB query builder for attribute filtering in backend/internal/services/product_service.go
-- [ ] T071 [US2] Implement Update method with validation and conflict checking in backend/internal/services/product_service.go
-- [ ] T072 [US2] Implement Delete method with cascade handling in backend/internal/services/product_service.go
-- [ ] T073 [US2] Implement BulkUpdateStatus method with transaction and error tracking in backend/internal/services/product_service.go
-- [ ] T074 [US2] Create conversion helpers (GORM model ↔ protobuf Product) in backend/internal/services/product_service.go
-- [ ] T075 [US2] Create ProductHandler struct in backend/internal/handlers/product_handler.go (inject ProductService)
-- [ ] T076 [US2] Implement Create handler (POST /api/v1/products) with OpenTracing spans in backend/internal/handlers/product_handler.go
-- [ ] T077 [US2] Implement Get handler (GET /api/v1/products/{id}) in backend/internal/handlers/product_handler.go
-- [ ] T078 [US2] Implement List handler (GET /api/v1/products) with query parameter parsing in backend/internal/handlers/product_handler.go
-- [ ] T079 [US2] Implement Update handler (PUT /api/v1/products/{id}) in backend/internal/handlers/product_handler.go
-- [ ] T080 [US2] Implement Delete handler (DELETE /api/v1/products/{id}) in backend/internal/handlers/product_handler.go
-- [ ] T081 [US2] Implement BulkUpdateStatus handler (POST /api/v1/products/bulk/status) in backend/internal/handlers/product_handler.go
-- [ ] T082 [US2] Register product routes in backend/cmd/server/main.go
-- [ ] T083 [US2] Create fixture helper for products in backend/tests/testutil/fixtures.go (createProductFixture function)
-- [ ] T084 [US2] Run all US2 integration tests and verify they pass
+- [x] T062 [P] [US2] Create Product GORM model in backend/internal/models/product.go (ID, TemplateID, Name, SKU, Description, AttributeValues JSONB, Status, timestamps)
+- [x] T063 [P] [US2] Create AttributeValue struct for JSONB in backend/internal/models/product.go (Type, Value interface{})
+- [x] T064 [US2] Define ProductService interface in backend/internal/services/product_service.go (Create, Get, List, Update, Delete, BulkUpdateStatus methods)
+- [x] T065 [US2] Implement ProductService with dependency injection in backend/internal/services/product_service.go (inject *gorm.DB)
+- [x] T066 [US2] Implement Create method with validation (required attributes, type checking, template exists) in backend/internal/services/product_service.go
+- [x] T067 [US2] Implement attribute validation logic (check required fields, validate types, check list options) in backend/internal/services/product_service.go
+- [x] T068 [US2] Implement Get method with optional includes (variants, media) in backend/internal/services/product_service.go
+- [x] T069 [US2] Implement List method with filters (template, status, search, attribute filters), pagination, sorting in backend/internal/services/product_service.go
+- [x] T070 [US2] Implement JSONB query builder for attribute filtering in backend/internal/services/product_service.go
+- [x] T071 [US2] Implement Update method with validation and conflict checking in backend/internal/services/product_service.go
+- [x] T072 [US2] Implement Delete method with cascade handling in backend/internal/services/product_service.go
+- [x] T073 [US2] Implement BulkUpdateStatus method with transaction and error tracking in backend/internal/services/product_service.go
+- [x] T074 [US2] Create conversion helpers (GORM model ↔ protobuf Product) in backend/internal/services/product_service.go
+- [x] T075 [US2] Create ProductHandler struct in backend/internal/handlers/product_handler.go (inject ProductService)
+- [x] T076 [US2] Implement Create handler (POST /api/v1/products) with OpenTracing spans in backend/internal/handlers/product_handler.go
+- [x] T077 [US2] Implement Get handler (GET /api/v1/products/{id}) in backend/internal/handlers/product_handler.go
+- [x] T078 [US2] Implement List handler (GET /api/v1/products) with query parameter parsing in backend/internal/handlers/product_handler.go
+- [x] T079 [US2] Implement Update handler (PUT /api/v1/products/{id}) in backend/internal/handlers/product_handler.go
+- [x] T080 [US2] Implement Delete handler (DELETE /api/v1/products/{id}) in backend/internal/handlers/product_handler.go
+- [x] T081 [US2] Implement BulkUpdateStatus handler (POST /api/v1/products/bulk/status) in backend/internal/handlers/product_handler.go
+- [x] T082 [US2] Register product routes in backend/cmd/server/main.go
+- [x] T083 [US2] Create fixture helper for products in backend/tests/testutil/db.go (CreateProductFixture function)
+- [x] T084 [US2] Run all US2 integration tests and verify they pass
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently. Administrators can define templates and create/manage products.
 

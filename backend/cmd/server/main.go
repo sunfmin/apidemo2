@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/opentracing/opentracing-go"
 	"gorm.io/driver/postgres"
@@ -46,17 +47,22 @@ func main() {
 	log.Println("✅ Database connected")
 
 	// Run auto-migration
-	if err := db.AutoMigrate(&models.ProductTemplate{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.ProductTemplate{},
+		&models.Product{},
+	); err != nil {
 		log.Fatalf("❌ Failed to run migrations: %v", err)
 	}
 	log.Println("✅ Database migrations complete")
 
 	// Initialize services
 	templateService := services.NewTemplateService(db)
+	productService := services.NewProductService(db)
 	log.Println("✅ Services initialized")
 
 	// Initialize handlers
 	templateHandler := handlers.NewTemplateHandler(templateService)
+	productHandler := handlers.NewProductHandler(productService)
 	log.Println("✅ Handlers initialized")
 
 	// Create HTTP router
@@ -94,9 +100,45 @@ func main() {
 		}
 	})
 
+	// Product routes - Collection endpoints
+	mux.HandleFunc("/api/v1/products", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			productHandler.Create(w, r)
+		case http.MethodGet:
+			productHandler.List(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Product routes - Item endpoints (with trailing slash for ID)
+	mux.HandleFunc("/api/v1/products/", func(w http.ResponseWriter, r *http.Request) {
+		// Check for bulk endpoints first
+		if strings.HasPrefix(r.URL.Path, "/api/v1/products/bulk/status") {
+			if r.Method == http.MethodPost {
+				productHandler.BulkUpdateStatus(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Individual product endpoints
+		switch r.Method {
+		case http.MethodGet:
+			productHandler.Get(w, r)
+		case http.MethodPut:
+			productHandler.Update(w, r)
+		case http.MethodDelete:
+			productHandler.Delete(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	log.Println("✅ Routes registered")
 
-	// TODO: Register product routes
 	// TODO: Register variant routes
 	// TODO: Register media routes
 
