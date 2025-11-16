@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package pim.v1;
+
+option go_package = "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1;pimv1";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+// Product represents a product instance
+message Product {
+  string id = 1;
+  string template_id = 2;
+  string template_name = 3; // Denormalized for display
+  string name = 4;
+  string sku = 5;
+  string description = 6;
+  map<string, AttributeValue> attribute_values = 7; // Attribute name -> value
+  ProductStatus status = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  int32 variant_count = 11; // Number of variants for this product
+  repeated string primary_image_urls = 12; // URLs of primary images (for list display)
+}
+
+// CreateProductRequest
+message CreateProductRequest {
+  string template_id = 1; // Required, must reference existing template
+  string name = 2; // Required, 1-255 characters
+  string sku = 3; // Required, 1-100 characters, unique, alphanumeric + dash/underscore
+  string description = 4; // Optional
+  map<string, AttributeValue> attribute_values = 5; // Required attributes from template must be present
+  ProductStatus status = 6; // Optional, defaults to DRAFT
+}
+
+// CreateProductResponse
+message CreateProductResponse {
+  Product product = 1;
+}
+
+// GetProductRequest
+message GetProductRequest {
+  string id = 1; // Required, UUID
+  bool include_variants = 2; // Optional, include variants in response
+  bool include_media = 3; // Optional, include media files in response
+}
+
+// GetProductResponse
+message GetProductResponse {
+  Product product = 1;
+  repeated ProductVariant variants = 2; // If include_variants = true
+  repeated MediaFile media_files = 3; // If include_media = true
+}
+
+// ProductVariant reference (defined in variant.proto, included here for response)
+message ProductVariant {
+  string id = 1;
+  string product_id = 2;
+  string name = 3;
+  string sku = 4;
+  map<string, AttributeValue> attribute_values = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// MediaFile reference (defined in media.proto, included here for response)
+message MediaFile {
+  string id = 1;
+  string attribute_name = 2;
+  MediaFileType file_type = 3;
+  string mime_type = 4;
+  string file_name = 5;
+  string url = 6;
+  string thumbnail_url = 7;
+  int64 file_size = 8;
+  int32 width = 9;
+  int32 height = 10;
+  int32 duration = 11; // Video duration in seconds
+  int32 display_order = 12;
+  google.protobuf.Timestamp created_at = 13;
+}
+
+// ListProductsRequest
+message ListProductsRequest {
+  PaginationRequest pagination = 1;
+  string template_id = 2; // Optional, filter by template
+  ProductStatus status = 3; // Optional, filter by status
+  string search = 4; // Optional, search by name or SKU
+  string sort_by = 5; // Optional, field to sort by (name, sku, created_at, updated_at)
+  string sort_order = 6; // Optional, "asc" or "desc" (default: "desc" for created_at)
+  map<string, string> attribute_filters = 7; // Optional, filter by attribute values
+}
+
+// ListProductsResponse
+message ListProductsResponse {
+  repeated Product products = 1;
+  PaginationResponse pagination = 2;
+}
+
+// UpdateProductRequest
+message UpdateProductRequest {
+  string id = 1; // Required, UUID
+  string name = 2; // Optional
+  string sku = 3; // Optional, must be unique if provided
+  string description = 4; // Optional
+  map<string, AttributeValue> attribute_values = 5; // Optional, updates specified attributes
+  ProductStatus status = 6; // Optional
+}
+
+// UpdateProductResponse
+message UpdateProductResponse {
+  Product product = 1;
+}
+
+// DeleteProductRequest
+message DeleteProductRequest {
+  string id = 1; // Required, UUID
+  bool delete_variants = 2; // Optional, default true (cascade delete variants)
+}
+
+// DeleteProductResponse
+message DeleteProductResponse {
+  bool success = 1;
+  int32 variants_deleted = 2; // Number of variants deleted
+}
+
+// BulkUpdateStatusRequest - Update status for multiple products
+message BulkUpdateStatusRequest {
+  repeated string product_ids = 1; // Required, list of product UUIDs
+  ProductStatus status = 2; // Required, new status
+}
+
+// BulkUpdateStatusResponse
+message BulkUpdateStatusResponse {
+  int32 updated_count = 1;
+  repeated string failed_ids = 2; // IDs that failed to update
+}
+
+// Product API endpoints:
+// POST   /api/v1/products              - Create product
+// GET    /api/v1/products/{id}         - Get product by ID
+// GET    /api/v1/products              - List products (with pagination, filters, search)
+// PUT    /api/v1/products/{id}         - Update product
+// DELETE /api/v1/products/{id}         - Delete product
+// POST   /api/v1/products/bulk/status  - Bulk update product status
+

@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package pim.v1;
+
+option go_package = "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1;pimv1";
+
+import "google/protobuf/timestamp.proto";
+
+// AttributeDefinition defines the structure of an attribute in a template
+message AttributeDefinition {
+  string name = 1;
+  AttributeType type = 2;
+  bool required = 3;
+  repeated string options = 4; // For list type attributes
+  map<string, string> validation = 5; // Validation rules as key-value pairs
+}
+
+// AttributeType enum
+enum AttributeType {
+  ATTRIBUTE_TYPE_UNSPECIFIED = 0;
+  ATTRIBUTE_TYPE_TEXT = 1;
+  ATTRIBUTE_TYPE_NUMBER = 2;
+  ATTRIBUTE_TYPE_BOOLEAN = 3;
+  ATTRIBUTE_TYPE_DATE = 4;
+  ATTRIBUTE_TYPE_LIST = 5;
+  ATTRIBUTE_TYPE_MAP = 6;
+  ATTRIBUTE_TYPE_IMAGE = 7;
+  ATTRIBUTE_TYPE_VIDEO = 8;
+}
+
+// AttributeValue represents a value for an attribute
+message AttributeValue {
+  AttributeType type = 1;
+  
+  // Value storage (only one should be set based on type)
+  string text_value = 2;
+  double number_value = 3;
+  bool boolean_value = 4;
+  string date_value = 5; // ISO 8601 format
+  repeated string list_value = 6;
+  map<string, string> map_value = 7;
+  repeated string media_ids = 8; // For image/video types, references to MediaFile IDs
+}
+
+// ProductStatus enum
+enum ProductStatus {
+  PRODUCT_STATUS_UNSPECIFIED = 0;
+  PRODUCT_STATUS_DRAFT = 1;
+  PRODUCT_STATUS_ACTIVE = 2;
+  PRODUCT_STATUS_INACTIVE = 3;
+}
+
+// MediaFileType enum
+enum MediaFileType {
+  MEDIA_FILE_TYPE_UNSPECIFIED = 0;
+  MEDIA_FILE_TYPE_IMAGE = 1;
+  MEDIA_FILE_TYPE_VIDEO = 2;
+}
+
+// Pagination request parameters
+message PaginationRequest {
+  int32 page = 1; // Page number (1-indexed)
+  int32 page_size = 2; // Items per page (default: 20, max: 100)
+}
+
+// Pagination response metadata
+message PaginationResponse {
+  int32 page = 1;
+  int32 page_size = 2;
+  int32 total_items = 3;
+  int32 total_pages = 4;
+}
+
+// Error response
+message ErrorResponse {
+  string code = 1; // Error code (e.g., "VALIDATION_ERROR", "NOT_FOUND")
+  string message = 2; // Human-readable error message
+  repeated FieldError field_errors = 3; // Field-specific validation errors
+}
+
+// Field-specific validation error
+message FieldError {
+  string field = 1; // Field name or path (e.g., "name", "attributes[0].type")
+  string message = 2; // Error message for this field
+}
+

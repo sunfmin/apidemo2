@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package pim.v1;
+
+option go_package = "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1;pimv1";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+// MediaFile represents an uploaded media file (image or video)
+message MediaFile {
+  string id = 1;
+  string entity_type = 2; // "product" or "variant"
+  string entity_id = 3; // UUID of product or variant
+  string attribute_name = 4; // Attribute this media belongs to
+  MediaFileType file_type = 5;
+  string mime_type = 6;
+  string file_name = 7;
+  string url = 8; // Public URL to access the original file
+  string thumbnail_url = 9; // Public URL to access thumbnail/preview
+  int64 file_size = 10; // Size in bytes
+  int32 width = 11; // Image/video width in pixels
+  int32 height = 12; // Image/video height in pixels
+  int32 duration = 13; // Video duration in seconds (null for images)
+  int32 display_order = 14; // Order for display (0 = primary)
+  google.protobuf.Timestamp created_at = 15;
+}
+
+// UploadMediaRequest - Used for multipart/form-data upload
+// This is documentation only - actual implementation uses multipart form parsing
+message UploadMediaRequest {
+  string entity_type = 1; // Required, "product" or "variant"
+  string entity_id = 2; // Required, UUID
+  string attribute_name = 3; // Required, must be image or video attribute
+  // file: binary file data (multipart form field)
+  int32 display_order = 4; // Optional, defaults to next available order
+}
+
+// UploadMediaResponse
+message UploadMediaResponse {
+  MediaFile media_file = 1;
+}
+
+// GetMediaRequest
+message GetMediaRequest {
+  string id = 1; // Required, UUID
+}
+
+// GetMediaResponse
+message GetMediaResponse {
+  MediaFile media_file = 1;
+}
+
+// ListMediaRequest
+message ListMediaRequest {
+  string entity_type = 1; // Required, "product" or "variant"
+  string entity_id = 2; // Required, UUID
+  string attribute_name = 3; // Optional, filter by specific attribute
+  MediaFileType file_type = 4; // Optional, filter by image or video
+}
+
+// ListMediaResponse
+message ListMediaResponse {
+  repeated MediaFile media_files = 1;
+}
+
+// UpdateMediaRequest - Update media metadata (not the file itself)
+message UpdateMediaRequest {
+  string id = 1; // Required, UUID
+  int32 display_order = 2; // Optional, change display order
+  string file_name = 3; // Optional, rename file (display name only)
+}
+
+// UpdateMediaResponse
+message UpdateMediaResponse {
+  MediaFile media_file = 1;
+}
+
+// DeleteMediaRequest
+message DeleteMediaRequest {
+  string id = 1; // Required, UUID
+}
+
+// DeleteMediaResponse
+message DeleteMediaResponse {
+  bool success = 1;
+}
+
+// ReorderMediaRequest - Reorder multiple media files
+message ReorderMediaRequest {
+  string entity_type = 1; // Required, "product" or "variant"
+  string entity_id = 2; // Required, UUID
+  string attribute_name = 3; // Required, attribute name
+  repeated string media_ids = 4; // Required, list of media IDs in new order
+}
+
+// ReorderMediaResponse
+message ReorderMediaResponse {
+  repeated MediaFile media_files = 1; // Updated media files with new display_order
+}
+
+// BulkUploadMediaRequest - Upload multiple files at once
+// This is documentation only - actual implementation uses multipart form parsing
+message BulkUploadMediaRequest {
+  string entity_type = 1; // Required, "product" or "variant"
+  string entity_id = 2; // Required, UUID
+  string attribute_name = 3; // Required, must be image or video attribute
+  // files[]: multiple binary file data (multipart form fields)
+}
+
+// BulkUploadMediaResponse
+message BulkUploadMediaResponse {
+  repeated MediaFile media_files = 1;
+  repeated BulkUploadError errors = 2;
+}
+
+// BulkUploadError
+message BulkUploadError {
+  string file_name = 1;
+  string error_message = 2;
+}
+
+// Media API endpoints:
+// POST   /api/v1/media/upload                        - Upload single media file (multipart/form-data)
+// POST   /api/v1/media/upload/bulk                   - Upload multiple media files (multipart/form-data)
+// GET    /api/v1/media/{id}                          - Get media file metadata
+// GET    /api/v1/media                               - List media files (query params: entity_type, entity_id, attribute_name, file_type)
+// PUT    /api/v1/media/{id}                          - Update media metadata
+// DELETE /api/v1/media/{id}                          - Delete media file
+// POST   /api/v1/media/reorder                       - Reorder media files
+// GET    /api/v1/media/file/{id}                     - Serve media file (redirects to storage URL)
+// GET    /api/v1/media/thumbnail/{id}                - Serve thumbnail/preview (redirects to storage URL)
+
