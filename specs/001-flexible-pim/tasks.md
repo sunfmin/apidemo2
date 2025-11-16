@@ -159,7 +159,7 @@
 - [x] T050 [US1] Implement List handler (GET /api/v1/templates) in backend/internal/handlers/template_handler.go
 - [x] T051 [US1] Implement Update handler (PUT /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
 - [x] T052 [US1] Implement Delete handler (DELETE /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
-- [ ] T053 [US1] Register template routes in backend/cmd/server/main.go (connect handlers to ServeMux)
+- [x] T053 [US1] Register template routes in backend/cmd/server/main.go (connect handlers to ServeMux)
 - [x] T054 [US1] Create fixture helper for templates in backend/tests/testutil/db.go (CreateTemplateFixture function)
 - [x] T055 [US1] Run all US1 integration tests and verify they pass
 

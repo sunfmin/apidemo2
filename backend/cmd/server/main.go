@@ -8,7 +8,13 @@ import (
 	"os/exec"
 
 	"github.com/opentracing/opentracing-go"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
+	"github.com/sunfmin/apidemo2/backend/internal/handlers"
 	"github.com/sunfmin/apidemo2/backend/internal/middleware"
+	"github.com/sunfmin/apidemo2/backend/internal/models"
+	"github.com/sunfmin/apidemo2/backend/internal/services"
 )
 
 func main() {
@@ -25,9 +31,33 @@ func main() {
 	opentracing.SetGlobalTracer(opentracing.NoopTracer{})
 	log.Println("✅ OpenTracing initialized (NoopTracer)")
 
-	// Initialize database connection (TODO: Load from config)
-	// For now, skip database connection in main - tests will use testcontainers
-	// Production deployment will need proper database configuration
+	// Initialize database connection
+	// Load from environment variable or use default for development
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "host=localhost user=postgres password=postgres dbname=pim_dev port=5432 sslmode=disable"
+		log.Println("⚠️  Using default database connection (set DATABASE_URL env variable for production)")
+	}
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("❌ Failed to connect to database: %v", err)
+	}
+	log.Println("✅ Database connected")
+
+	// Run auto-migration
+	if err := db.AutoMigrate(&models.ProductTemplate{}); err != nil {
+		log.Fatalf("❌ Failed to run migrations: %v", err)
+	}
+	log.Println("✅ Database migrations complete")
+
+	// Initialize services
+	templateService := services.NewTemplateService(db)
+	log.Println("✅ Services initialized")
+
+	// Initialize handlers
+	templateHandler := handlers.NewTemplateHandler(templateService)
+	log.Println("✅ Handlers initialized")
 
 	// Create HTTP router
 	mux := http.NewServeMux()
@@ -38,35 +68,33 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	// TODO: Initialize services and handlers once database is connected
-	// db, err := database.Connect(config)
-	// templateService := services.NewTemplateService(db)
-	// templateHandler := handlers.NewTemplateHandler(templateService)
-	// 
-	// // Template routes
-	// mux.HandleFunc("/api/v1/templates", func(w http.ResponseWriter, r *http.Request) {
-	// 	switch r.Method {
-	// 	case http.MethodPost:
-	// 		templateHandler.Create(w, r)
-	// 	case http.MethodGet:
-	// 		templateHandler.List(w, r)
-	// 	default:
-	// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	// 	}
-	// })
-	// 
-	// mux.HandleFunc("/api/v1/templates/", func(w http.ResponseWriter, r *http.Request) {
-	// 	switch r.Method {
-	// 	case http.MethodGet:
-	// 		templateHandler.Get(w, r)
-	// 	case http.MethodPut:
-	// 		templateHandler.Update(w, r)
-	// 	case http.MethodDelete:
-	// 		templateHandler.Delete(w, r)
-	// 	default:
-	// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	// 	}
-	// })
+	// Template routes - Collection endpoints
+	mux.HandleFunc("/api/v1/templates", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			templateHandler.Create(w, r)
+		case http.MethodGet:
+			templateHandler.List(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Template routes - Item endpoints (with trailing slash for ID)
+	mux.HandleFunc("/api/v1/templates/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			templateHandler.Get(w, r)
+		case http.MethodPut:
+			templateHandler.Update(w, r)
+		case http.MethodDelete:
+			templateHandler.Delete(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	log.Println("✅ Routes registered")
 
 	// TODO: Register product routes
 	// TODO: Register variant routes
