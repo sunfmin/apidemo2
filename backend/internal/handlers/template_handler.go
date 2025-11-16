@@ -12,6 +12,8 @@ import (
 	"github.com/sunfmin/apidemo2/backend/internal/services"
 )
 
+// Note: Error codes singleton defined in error_codes.go
+
 // TemplateHandler handles HTTP requests for product templates
 type TemplateHandler struct {
 	service services.TemplateService
@@ -32,7 +34,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req pb.CreateTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
+		RespondWithError(w, Errors.InvalidRequest)
 		return
 	}
 
@@ -40,22 +42,22 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	template, err := h.service.Create(ctx, &req)
 	if err != nil {
 		span.SetTag("error", true)
-		span.SetTag("error.message", err.Error)
+		span.SetTag("error.message", err.Error())
 
-		// Determine status code based on error
+		// Determine error type based on error message
 		if strings.Contains(err.Error(), "already exists") {
-			ErrorResponse(w, "DUPLICATE_ERROR", err.Error(), http.StatusConflict)
+			RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
 			return
 		}
 		if strings.Contains(err.Error(), "required") || 
 		   strings.Contains(err.Error(), "invalid") || 
 		   strings.Contains(err.Error(), "must") || 
 		   strings.Contains(err.Error(), "duplicate") {
-			ErrorResponse(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
+			RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
 			return
 		}
 
-		ErrorResponse(w, "INTERNAL_ERROR", "Failed to create template", http.StatusInternalServerError)
+		RespondWithErrorMessage(w, Errors.InternalError, "Failed to create template")
 		return
 	}
 
@@ -74,7 +76,7 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/templates/")
 	if id == "" || id == "/api/v1/templates" {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Template ID is required", http.StatusBadRequest)
+		RespondWithErrorMessage(w, Errors.InvalidRequest, "Template ID is required")
 		return
 	}
 
@@ -85,11 +87,11 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 		span.SetTag("error.message", err.Error())
 
 		if strings.Contains(err.Error(), "not found") {
-			ErrorResponse(w, "NOT_FOUND", err.Error(), http.StatusNotFound)
+			RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
 			return
 		}
 
-		ErrorResponse(w, "INTERNAL_ERROR", "Failed to get template", http.StatusInternalServerError)
+		RespondWithErrorMessage(w, Errors.InternalError, "Failed to get template")
 		return
 	}
 
@@ -135,7 +137,7 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.message", err.Error())
-		ErrorResponse(w, "INTERNAL_ERROR", "Failed to list templates", http.StatusInternalServerError)
+		RespondWithErrorMessage(w, Errors.InternalError, "Failed to list templates")
 		return
 	}
 
@@ -157,7 +159,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/templates/")
 	if id == "" || id == "/api/v1/templates" {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Template ID is required", http.StatusBadRequest)
+		RespondWithErrorMessage(w, Errors.InvalidRequest, "Template ID is required")
 		return
 	}
 
@@ -165,7 +167,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req pb.UpdateTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
+		RespondWithError(w, Errors.InvalidRequest)
 		return
 	}
 
@@ -179,22 +181,22 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		span.SetTag("error.message", err.Error())
 
 		if strings.Contains(err.Error(), "not found") {
-			ErrorResponse(w, "NOT_FOUND", err.Error(), http.StatusNotFound)
+			RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
 			return
 		}
 		if strings.Contains(err.Error(), "already exists") {
-			ErrorResponse(w, "DUPLICATE_ERROR", err.Error(), http.StatusConflict)
+			RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
 			return
 		}
 		if strings.Contains(err.Error(), "required") || 
 		   strings.Contains(err.Error(), "invalid") || 
 		   strings.Contains(err.Error(), "must") || 
 		   strings.Contains(err.Error(), "duplicate") {
-			ErrorResponse(w, "VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
+			RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
 			return
 		}
 
-		ErrorResponse(w, "INTERNAL_ERROR", "Failed to update template", http.StatusInternalServerError)
+		RespondWithErrorMessage(w, Errors.InternalError, "Failed to update template")
 		return
 	}
 
@@ -213,7 +215,7 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/templates/")
 	if id == "" || id == "/api/v1/templates" {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Template ID is required", http.StatusBadRequest)
+		RespondWithErrorMessage(w, Errors.InvalidRequest, "Template ID is required")
 		return
 	}
 
@@ -224,15 +226,15 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		span.SetTag("error.message", err.Error())
 
 		if strings.Contains(err.Error(), "not found") {
-			ErrorResponse(w, "NOT_FOUND", err.Error(), http.StatusNotFound)
+			RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
 			return
 		}
 		if strings.Contains(err.Error(), "has products") {
-			ErrorResponse(w, "CONFLICT", err.Error(), http.StatusConflict)
+			RespondWithErrorMessage(w, Errors.Conflict, err.Error())
 			return
 		}
 
-		ErrorResponse(w, "INTERNAL_ERROR", "Failed to delete template", http.StatusInternalServerError)
+		RespondWithErrorMessage(w, Errors.InternalError, "Failed to delete template")
 		return
 	}
 
