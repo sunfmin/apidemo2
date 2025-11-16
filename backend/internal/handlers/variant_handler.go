@@ -194,3 +194,48 @@ func (h *VariantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(&pb.DeleteVariantResponse{Success: true})
 }
 
+// BulkCreate handles POST /api/v1/products/{product_id}/variants/bulk
+func (h *VariantHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
+	// Create child span
+	span, ctx := opentracing.StartSpanFromContext(r.Context(), "VariantHandler.BulkCreate")
+	defer span.Finish()
+
+	span.SetTag("http.method", r.Method)
+	span.SetTag("http.url", r.URL.String())
+
+	// Parse request
+	var req pb.BulkCreateVariantsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		span.SetTag("error", true)
+		RespondWithError(w, Errors.InvalidRequest)
+		return
+	}
+
+	// Call service
+	response, err := h.service.BulkCreate(ctx, &req)
+	if err != nil {
+		span.SetTag("error", true)
+		span.SetTag("error.message", err.Error())
+		HandleServiceError(w, err)
+		return
+	}
+
+	// Determine HTTP status code based on results
+	statusCode := http.StatusCreated
+	if len(response.Variants) == 0 {
+		// All variants failed
+		statusCode = http.StatusBadRequest
+	} else if len(response.Errors) > 0 {
+		// Partial success
+		statusCode = http.StatusMultiStatus
+	}
+
+	// Return response
+	span.SetTag("http.status_code", statusCode)
+	span.SetTag("variants_created", len(response.Variants))
+	span.SetTag("variants_failed", len(response.Errors))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(response)
+}
+

@@ -121,3 +121,39 @@ func CreateProductFixture(db *gorm.DB, templateID string, name string, sku strin
 	return product
 }
 
+// CreateVariantFixture creates a test product variant with pricing and inventory
+func CreateVariantFixture(db *gorm.DB, productID string, name string, sku string, attributeValues string) *models.ProductVariant {
+	if attributeValues == "" {
+		// Default attribute values (empty overrides)
+		attributeValues = `{}`
+	}
+
+	variant := &models.ProductVariant{
+		ProductID:       productID,
+		Name:            name,
+		SKU:             sku,
+		AttributeValues: []byte(attributeValues),
+	}
+
+	db.Create(variant)
+
+	// Create variant pricing
+	pricing := &models.VariantPricing{
+		VariantID: variant.ID,
+		ListPrice: 99.99,
+		SalePrice: 0,
+		ValidFrom: time.Now(),
+	}
+	db.Create(pricing)
+
+	// Create variant inventory
+	inventory := &models.VariantInventory{
+		VariantID:      variant.ID,
+		LocationID:     "default",
+		OnHandQuantity: 100,
+	}
+	db.Create(inventory)
+
+	return variant
+}
+

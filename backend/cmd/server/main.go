@@ -163,6 +163,16 @@ func main() {
 	// Note: This needs careful routing to distinguish from /api/v1/products/{id}
 	// Pattern: /api/v1/products/{product_id}/variants
 	mux.HandleFunc("/api/v1/products/", func(w http.ResponseWriter, r *http.Request) {
+		// Check for bulk variant creation first
+		if strings.HasSuffix(r.URL.Path, "/variants/bulk") {
+			if r.Method == http.MethodPost {
+				variantHandler.BulkCreate(w, r)
+				return
+			}
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		// Check if this is a variant-related request
 		if strings.HasSuffix(r.URL.Path, "/variants") {
 			if r.Method == http.MethodGet {

@@ -315,7 +315,7 @@
   - Edge case: Verify other variants remain
   - Table-driven test structure
 
-- [ ] T090 [US3] HTTP integration test for POST /api/v1/products/{product_id}/variants/bulk in backend/tests/integration/variant_test.go
+- [x] T090 [US3] HTTP integration test for POST /api/v1/products/{product_id}/variants/bulk in backend/tests/integration/variant_test.go
   - Happy path: Create multiple variants at once
   - Edge case: Empty variants array (400)
   - Edge case: Some variants have duplicate SKUs (partial success, return errors)
@@ -325,7 +325,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T091 [P] [US3] Create ProductVariant GORM model in backend/internal/models/variant.go (ID, ProductID, Name, SKU, AttributeValues JSONB, timestamps)
+- [x] T091 [P] [US3] Create ProductVariant GORM model in backend/internal/models/product.go (ID, ProductID, Name, SKU, AttributeValues JSONB, timestamps)
 - [x] T092 [US3] Define VariantService interface in backend/internal/services/variant_service.go (Create, Get, List, Update, Delete, BulkCreate methods)
 - [x] T093 [US3] Implement VariantService with dependency injection in backend/internal/services/variant_service.go (inject *gorm.DB)
 - [x] T094 [US3] Implement Create method with validation (SKU unique, product exists) in backend/internal/services/variant_service.go
@@ -334,7 +334,7 @@
 - [x] T097 [US3] Implement List method with filters, pagination, sorting in backend/internal/services/variant_service.go
 - [x] T098 [US3] Implement Update method with validation and conflict checking in backend/internal/services/variant_service.go
 - [x] T099 [US3] Implement Delete method in backend/internal/services/variant_service.go
-- [ ] T100 [US3] Implement BulkCreate method with transaction and error tracking in backend/internal/services/variant_service.go
+- [x] T100 [US3] Implement BulkCreate method with transaction and error tracking in backend/internal/services/variant_service.go
 - [x] T101 [US3] Create conversion helpers (GORM model ↔ protobuf ProductVariant) in backend/internal/services/variant_service.go
 - [x] T102 [US3] Create VariantHandler struct in backend/internal/handlers/variant_handler.go (inject VariantService)
 - [x] T103 [US3] Implement Create handler (POST /api/v1/products/{product_id}/variants) with OpenTracing spans in backend/internal/handlers/variant_handler.go
@@ -342,9 +342,9 @@
 - [x] T105 [US3] Implement List handler (GET /api/v1/products/{product_id}/variants) in backend/internal/handlers/variant_handler.go
 - [x] T106 [US3] Implement Update handler (PUT /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
 - [x] T107 [US3] Implement Delete handler (DELETE /api/v1/variants/{id}) in backend/internal/handlers/variant_handler.go
-- [ ] T108 [US3] Implement BulkCreate handler (POST /api/v1/products/{product_id}/variants/bulk) in backend/internal/handlers/variant_handler.go
+- [x] T108 [US3] Implement BulkCreate handler (POST /api/v1/products/{product_id}/variants/bulk) in backend/internal/handlers/variant_handler.go
 - [x] T109 [US3] Register variant routes in backend/cmd/server/main.go
-- [ ] T110 [US3] Create fixture helper for variants in backend/tests/testutil/fixtures.go (createVariantFixture function)
+- [x] T110 [US3] Create fixture helper for variants in backend/tests/testutil/db.go (CreateVariantFixture function)
 - [x] T111 [US3] Run all US3 integration tests and verify they pass (20 test cases total)
 
 **Checkpoint**: At this point, User Stories 1, 2, AND 3 should all work independently. Administrators can define templates, create products, and manage variants.
@@ -428,7 +428,7 @@
 ### Implementation for User Story 4
 
 - [x] T119 [P] [US4] Create MediaFile GORM model in backend/internal/models/product.go (ID, EntityType, EntityID, AttributeName, FileType, MimeType, FileName, FilePath, FileSize, Width, Height, Duration, DisplayOrder, timestamps)
-- [ ] T120 [US4] Define MediaService interface in backend/internal/services/media_service.go (Upload, UploadBulk, Get, List, Update, Delete, Reorder, GetURL, GetThumbnailURL methods)
+- [x] T120 [US4] Define MediaService interface in backend/internal/services/media_service.go (Upload, UploadBulk, Get, List, Update, Delete, Reorder, GetURL, GetThumbnailURL methods)
 - [ ] T121 [US4] Implement MediaService with dependency injection in backend/internal/services/media_service.go (inject *gorm.DB, MediaStorage, ImageProcessor, VideoProcessor)
 - [ ] T122 [US4] Implement file validation (type by magic bytes, size limits) in backend/internal/services/media_service.go
 - [ ] T123 [US4] Implement Upload method for images (validate, store, generate thumbnail, save metadata) in backend/internal/services/media_service.go

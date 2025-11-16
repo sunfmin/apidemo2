@@ -717,3 +717,280 @@ func TestVariantHandler_Delete(t *testing.T) {
 	t.Log("✅ All test cases passed")
 }
 
+// TestVariantHandler_BulkCreate tests the POST /api/v1/products/{product_id}/variants/bulk endpoint
+func TestVariantHandler_BulkCreate(t *testing.T) {
+	// Setup test database
+	db, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	defer testutil.TruncateTables(db, "product_templates", "products", "product_pricings", "product_inventories", "product_variants", "variant_pricings", "variant_inventories")
+
+	// Initialize services and handlers
+	variantService := services.NewVariantService(db)
+	handler := handlers.NewVariantHandler(variantService)
+
+	// Create template and product
+	template := testutil.CreateTemplateFixture(db, "Clothing", `[
+		{"name":"Size","type":"list","required":true,"options":["S","M","L","XL"]},
+		{"name":"Color","type":"list","required":true,"options":["Red","Blue","Black","White"]}
+	]`)
+
+	product := testutil.CreateProductFixture(db, template.ID, "T-Shirt", "TSHIRT-BASE", `{
+		"Size":{"type":"ATTRIBUTE_TYPE_LIST","value":["M"]},
+		"Color":{"type":"ATTRIBUTE_TYPE_LIST","value":["Blue"]}
+	}`)
+
+	// Create product pricing and inventory
+	db.Create(&models.ProductPricing{ProductID: product.ID, ListPrice: 29.99, Currency: "USD", ValidFrom: time.Now()})
+	db.Create(&models.ProductInventory{ProductID: product.ID, LocationID: "default", OnHandQuantity: 100})
+
+	// Table-driven test cases
+	testCases := []struct {
+		name                string
+		request             *pb.BulkCreateVariantsRequest
+		expectedStatus      int
+		expectedVariantCount int
+		expectedErrorCount   int
+	}{
+		{
+			name: "successful_multiple_variants",
+			request: &pb.BulkCreateVariantsRequest{
+				ProductId: product.ID,
+				Variants: []*pb.VariantInput{
+					{
+						Name: "T-Shirt - Small Red",
+						Sku:  "TSHIRT-S-RED",
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size":  {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"S"}},
+							"Color": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Red"}},
+						},
+					},
+					{
+						Name: "T-Shirt - Large Black",
+						Sku:  "TSHIRT-L-BLACK",
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size":  {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"L"}},
+							"Color": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
+						},
+					},
+					{
+						Name: "T-Shirt - XL White",
+						Sku:  "TSHIRT-XL-WHITE",
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size":  {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"XL"}},
+							"Color": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"White"}},
+						},
+					},
+				},
+			},
+			expectedStatus:       http.StatusCreated,
+			expectedVariantCount: 3,
+			expectedErrorCount:   0,
+		},
+		{
+			name: "empty_variants_array",
+			request: &pb.BulkCreateVariantsRequest{
+				ProductId: product.ID,
+				Variants:  []*pb.VariantInput{},
+			},
+			expectedStatus:       http.StatusBadRequest,
+			expectedVariantCount: 0,
+			expectedErrorCount:   0,
+		},
+		{
+			name: "duplicate_skus_in_batch",
+			request: &pb.BulkCreateVariantsRequest{
+				ProductId: product.ID,
+				Variants: []*pb.VariantInput{
+					{
+						Name: "T-Shirt - Variant 1",
+						Sku:  "DUPLICATE-SKU",
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"S"}},
+						},
+					},
+					{
+						Name: "T-Shirt - Variant 2",
+						Sku:  "DUPLICATE-SKU", // Duplicate within batch
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"M"}},
+						},
+					},
+				},
+			},
+			expectedStatus:       http.StatusMultiStatus,
+			expectedVariantCount: 1, // First one succeeds
+			expectedErrorCount:   1, // Second one fails
+		},
+		{
+			name: "invalid_product_id",
+			request: &pb.BulkCreateVariantsRequest{
+				ProductId: "550e8400-e29b-41d4-a716-446655440000",
+				Variants: []*pb.VariantInput{
+					{
+						Name: "T-Shirt - Test",
+						Sku:  "TEST-SKU",
+						AttributeValues: map[string]*pb.AttributeValue{},
+					},
+				},
+			},
+			expectedStatus:       http.StatusNotFound,
+			expectedVariantCount: 0,
+			expectedErrorCount:   0,
+		},
+		{
+			name: "mix_valid_invalid_variants",
+			request: &pb.BulkCreateVariantsRequest{
+				ProductId: product.ID,
+				Variants: []*pb.VariantInput{
+					{
+						Name: "Valid Variant 1",
+						Sku:  "VALID-001",
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"S"}},
+						},
+					},
+					{
+						Name: "", // Invalid: empty name
+						Sku:  "INVALID-002",
+						AttributeValues: map[string]*pb.AttributeValue{},
+					},
+					{
+						Name: "Valid Variant 3",
+						Sku:  "VALID-003",
+						AttributeValues: map[string]*pb.AttributeValue{
+							"Size": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"L"}},
+						},
+					},
+					{
+						Name: "Invalid SKU Format",
+						Sku:  "INVALID@SKU#004", // Invalid characters
+						AttributeValues: map[string]*pb.AttributeValue{},
+					},
+				},
+			},
+			expectedStatus:       http.StatusMultiStatus,
+			expectedVariantCount: 2, // Two valid variants
+			expectedErrorCount:   2, // Two invalid variants
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Serialize request
+			reqBody, err := json.Marshal(tc.request)
+			if err != nil {
+				t.Fatalf("Failed to marshal request: %v", err)
+			}
+
+			// Create HTTP request
+			url := fmt.Sprintf("/api/v1/products/%s/variants/bulk", tc.request.ProductId)
+			req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(reqBody))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			// Execute handler
+			handler.BulkCreate(rec, req)
+
+			// Assert response status
+			if rec.Code != tc.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Body: %s", tc.expectedStatus, rec.Code, rec.Body.String())
+			}
+
+			// For successful or partial success responses, parse and verify
+			if rec.Code == http.StatusCreated || rec.Code == http.StatusMultiStatus {
+				var response pb.BulkCreateVariantsResponse
+				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+
+				// Verify variant count
+				if len(response.Variants) != tc.expectedVariantCount {
+					t.Errorf("Expected %d variants created, got %d", tc.expectedVariantCount, len(response.Variants))
+				}
+
+				// Verify error count
+				if len(response.Errors) != tc.expectedErrorCount {
+					t.Errorf("Expected %d errors, got %d", tc.expectedErrorCount, len(response.Errors))
+					for _, err := range response.Errors {
+						t.Logf("Error at index %d (SKU: %s): %s", err.Index, err.Sku, err.ErrorMessage)
+					}
+				}
+
+				// Verify created variants have required fields
+				for i, variant := range response.Variants {
+					if variant.Id == "" {
+						t.Errorf("Variant %d: ID is empty", i)
+					}
+					if variant.ProductId != tc.request.ProductId {
+						t.Errorf("Variant %d: ProductId mismatch", i)
+					}
+					if variant.Name == "" {
+						t.Errorf("Variant %d: Name is empty", i)
+					}
+					if variant.Sku == "" {
+						t.Errorf("Variant %d: SKU is empty", i)
+					}
+					if variant.CreatedAt == nil {
+						t.Errorf("Variant %d: CreatedAt is nil", i)
+					}
+					if variant.UpdatedAt == nil {
+						t.Errorf("Variant %d: UpdatedAt is nil", i)
+					}
+					// Verify effective attributes include merged values
+					if variant.EffectiveAttributeValues == nil {
+						t.Errorf("Variant %d: EffectiveAttributeValues is nil", i)
+					}
+				}
+
+				// Verify errors have required fields
+				for i, bulkErr := range response.Errors {
+					if bulkErr.Sku == "" {
+						t.Errorf("Error %d: SKU is empty", i)
+					}
+					if bulkErr.ErrorMessage == "" {
+						t.Errorf("Error %d: ErrorMessage is empty", i)
+					}
+				}
+
+				// Verify variants were actually created in database
+				for _, variant := range response.Variants {
+					var dbVariant models.ProductVariant
+					if err := db.First(&dbVariant, "id = ?", variant.Id).Error; err != nil {
+						t.Errorf("Variant %s not found in database: %v", variant.Id, err)
+					}
+					
+					// Verify pricing and inventory were also created
+					var pricing models.VariantPricing
+					if err := db.First(&pricing, "variant_id = ?", variant.Id).Error; err != nil {
+						t.Errorf("Variant pricing for %s not found: %v", variant.Id, err)
+					}
+					
+					var inventory models.VariantInventory
+					if err := db.First(&inventory, "variant_id = ?", variant.Id).Error; err != nil {
+						t.Errorf("Variant inventory for %s not found: %v", variant.Id, err)
+					}
+				}
+			}
+
+			// Cleanup: Truncate tables after each test case
+			testutil.TruncateTables(db, "product_templates", "products", "product_pricings", "product_inventories", "product_variants", "variant_pricings", "variant_inventories")
+
+			// Recreate template and product for next test
+			if tc.name != testCases[len(testCases)-1].name {
+				template = testutil.CreateTemplateFixture(db, "Clothing", `[
+					{"name":"Size","type":"list","required":true,"options":["S","M","L","XL"]},
+					{"name":"Color","type":"list","required":true,"options":["Red","Blue","Black","White"]}
+				]`)
+				product = testutil.CreateProductFixture(db, template.ID, "T-Shirt", "TSHIRT-BASE", `{
+					"Size":{"type":"ATTRIBUTE_TYPE_LIST","value":["M"]},
+					"Color":{"type":"ATTRIBUTE_TYPE_LIST","value":["Blue"]}
+				}`)
+				db.Create(&models.ProductPricing{ProductID: product.ID, ListPrice: 29.99, Currency: "USD", ValidFrom: time.Now()})
+				db.Create(&models.ProductInventory{ProductID: product.ID, LocationID: "default", OnHandQuantity: 100})
+			}
+		})
+	}
+
+	t.Log("✅ All test cases passed")
+}
+

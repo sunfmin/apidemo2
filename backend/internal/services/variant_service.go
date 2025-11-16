@@ -22,6 +22,7 @@ type VariantService interface {
 	List(ctx context.Context, productID string) ([]*pb.ProductVariant, error)
 	Update(ctx context.Context, req *pb.UpdateVariantRequest) (*pb.ProductVariant, error)
 	Delete(ctx context.Context, id string) error
+	BulkCreate(ctx context.Context, req *pb.BulkCreateVariantsRequest) (*pb.BulkCreateVariantsResponse, error)
 }
 
 type variantService struct {
@@ -249,6 +250,183 @@ func (s *variantService) Delete(ctx context.Context, id string) error {
 	}
 
 	return tx.Commit().Error
+}
+
+// BulkCreate creates multiple variants at once with transaction support
+func (s *variantService) BulkCreate(ctx context.Context, req *pb.BulkCreateVariantsRequest) (*pb.BulkCreateVariantsResponse, error) {
+	// Validate request
+	if req.ProductId == "" {
+		return nil, errors.New("product_id is required")
+	}
+	if len(req.Variants) == 0 {
+		return nil, errors.New("at least one variant is required")
+	}
+
+	// Verify product exists and load template
+	var product models.Product
+	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", req.ProductId).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("product not found: %s", req.ProductId)
+		}
+		return nil, err
+	}
+
+	response := &pb.BulkCreateVariantsResponse{
+		Variants: make([]*pb.ProductVariant, 0),
+		Errors:   make([]*pb.BulkCreateError, 0),
+	}
+
+	// Use transaction for atomic creation
+	tx := s.db.WithContext(ctx).Begin()
+	defer tx.Rollback()
+
+	// Track SKUs to detect duplicates within the batch
+	skusSeen := make(map[string]int)
+
+	for i, variantInput := range req.Variants {
+		// Validate individual variant
+		if err := s.validateVariantInput(variantInput, i, skusSeen); err != nil {
+			response.Errors = append(response.Errors, &pb.BulkCreateError{
+				Index:        int32(i),
+				Sku:          variantInput.Sku,
+				ErrorMessage: err.Error(),
+			})
+			continue
+		}
+
+		// Convert attributes to JSON
+		attrJSON, err := s.protoAttributesToJSON(variantInput.AttributeValues)
+		if err != nil {
+			response.Errors = append(response.Errors, &pb.BulkCreateError{
+				Index:        int32(i),
+				Sku:          variantInput.Sku,
+				ErrorMessage: fmt.Sprintf("failed to serialize attributes: %v", err),
+			})
+			continue
+		}
+
+		// Create variant model
+		variant := &models.ProductVariant{
+			ProductID:       req.ProductId,
+			Name:            variantInput.Name,
+			SKU:             variantInput.Sku,
+			AttributeValues: attrJSON,
+		}
+
+		// Save variant
+		if err := tx.Create(variant).Error; err != nil {
+			if strings.Contains(err.Error(), "duplicate key") && strings.Contains(err.Error(), "sku") {
+				response.Errors = append(response.Errors, &pb.BulkCreateError{
+					Index:        int32(i),
+					Sku:          variantInput.Sku,
+					ErrorMessage: fmt.Sprintf("SKU already exists: %s", variantInput.Sku),
+				})
+			} else {
+				response.Errors = append(response.Errors, &pb.BulkCreateError{
+					Index:        int32(i),
+					Sku:          variantInput.Sku,
+					ErrorMessage: fmt.Sprintf("database error: %v", err),
+				})
+			}
+			continue
+		}
+
+		// Create variant pricing with default values
+		pricing := &models.VariantPricing{
+			VariantID: variant.ID,
+			ListPrice: 0.0,
+			ValidFrom: time.Now(),
+		}
+		if err := tx.Create(pricing).Error; err != nil {
+			response.Errors = append(response.Errors, &pb.BulkCreateError{
+				Index:        int32(i),
+				Sku:          variantInput.Sku,
+				ErrorMessage: fmt.Sprintf("failed to create pricing: %v", err),
+			})
+			// Delete the variant to maintain consistency
+			tx.Delete(variant)
+			continue
+		}
+
+		// Create variant inventory with default values
+		inventory := &models.VariantInventory{
+			VariantID:      variant.ID,
+			LocationID:     "default",
+			OnHandQuantity: 0,
+		}
+		if err := tx.Create(inventory).Error; err != nil {
+			response.Errors = append(response.Errors, &pb.BulkCreateError{
+				Index:        int32(i),
+				Sku:          variantInput.Sku,
+				ErrorMessage: fmt.Sprintf("failed to create inventory: %v", err),
+			})
+			// Delete the variant and pricing to maintain consistency
+			tx.Delete(pricing)
+			tx.Delete(variant)
+			continue
+		}
+
+		// Load relationships
+		variant.Pricing = pricing
+		variant.Inventories = []models.VariantInventory{*inventory}
+
+		// Convert to protobuf
+		pbVariant, err := s.modelToProto(variant, &product)
+		if err != nil {
+			response.Errors = append(response.Errors, &pb.BulkCreateError{
+				Index:        int32(i),
+				Sku:          variantInput.Sku,
+				ErrorMessage: fmt.Sprintf("failed to convert to protobuf: %v", err),
+			})
+			continue
+		}
+
+		response.Variants = append(response.Variants, pbVariant)
+	}
+
+	// Commit transaction if at least one variant was created successfully
+	if len(response.Variants) > 0 {
+		if err := tx.Commit().Error; err != nil {
+			return nil, fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else {
+		// All variants failed, rollback
+		tx.Rollback()
+	}
+
+	return response, nil
+}
+
+// validateVariantInput validates a single variant input for bulk creation
+func (s *variantService) validateVariantInput(input *pb.VariantInput, index int, skusSeen map[string]int) error {
+	if input.Name == "" {
+		return errors.New("variant name is required")
+	}
+	if len(input.Name) > 255 {
+		return errors.New("variant name must be 255 characters or less")
+	}
+	if input.Sku == "" {
+		return errors.New("SKU is required")
+	}
+	if len(input.Sku) > 100 {
+		return errors.New("SKU must be 100 characters or less")
+	}
+
+	// Validate SKU format (alphanumeric, dash, underscore)
+	for _, char := range input.Sku {
+		if !(char >= 'a' && char <= 'z') && !(char >= 'A' && char <= 'Z') &&
+			!(char >= '0' && char <= '9') && char != '-' && char != '_' {
+			return fmt.Errorf("SKU contains invalid character: %c", char)
+		}
+	}
+
+	// Check for duplicate SKU within the batch
+	if prevIndex, exists := skusSeen[input.Sku]; exists {
+		return fmt.Errorf("duplicate SKU in batch (also at index %d): %s", prevIndex, input.Sku)
+	}
+	skusSeen[input.Sku] = index
+
+	return nil
 }
 
 // validateCreateRequest validates variant creation request
