@@ -1,25 +1,26 @@
 <!--
 Sync Impact Report:
-- Version: 1.5.2 → 1.5.3 (PATCH bump - enforce protobuf comparison for all test assertions)
-- Modified principles:
-  - VI. Protobuf Data Structures - strengthened requirement for protobuf comparison in tests
-- Clarifications added:
-  - Tests MUST NOT use individual field comparisons for protobuf messages
-  - ALL protobuf message assertions MUST use cmp.Diff() with protocmp.Transform()
-  - Individual field checks ONLY acceptable for non-protobuf types
-  - Added explicit examples showing correct vs incorrect assertion patterns
+- Version: 1.5.3 → 1.6.0 (MINOR bump - new principle added: Type-Safe Error Definitions)
+- New principles:
+  - IX. Type-Safe Error Definitions - require singleton struct for error codes/messages
+- Requirements added:
+  - Error codes and messages MUST NOT be hardcoded strings
+  - Singleton struct instance MUST define all errors in central location
+  - Error references MUST use singleton fields (e.g., Errors.InvalidRequest.Code)
+  - HTTP status codes MAY be included in error struct
+  - Errors organized by category (validation, not found, conflict, internal)
 - Rationale:
-  - Individual field comparisons miss structural differences and unknown fields
-  - Incomplete validation leads to bugs going undetected
-  - Full message comparison ensures complete test coverage
-  - Protocmp handles protobuf semantics correctly (unknown fields, extensions, etc.)
+  - Hardcoded strings lead to typos, inconsistencies, difficult refactoring
+  - Singleton struct provides compile-time type safety and IDE autocomplete
+  - Makes errors discoverable and prevents duplication
+  - Treats errors as first-class citizens in type system
 - Impact:
-  - Tests must be updated to use protocmp for all protobuf assertions
-  - Better test coverage and bug detection
-  - Consistent assertion patterns across all tests
+  - New error definitions package must be created
+  - Existing hardcoded error strings should be refactored to use singleton
+  - Better type safety and error consistency across codebase
 - Templates requiring updates:
-  ✅ spec-template.md - updated to reference protobuf comparison requirement
-  ✅ tasks-template.md - already references protobuf structs and comparison
+  ✅ tasks-template.md - will add error definitions to setup phase
+  ✅ Code review requirements updated
 -->
 
 
@@ -512,6 +513,117 @@ func TestProductHandler_Create(t *testing.T) {
 
 **Note**: We do NOT test services separately. HTTP integration tests already cover the full stack (HTTP → Service → Repository → Database). The service layer exists for code reusability and clean architecture, not for separate testing.
 
+### IX. Type-Safe Error Definitions
+
+Error codes and messages MUST be defined using singleton struct instances for type safety:
+- Error codes and messages MUST NOT be hardcoded strings scattered throughout the codebase
+- A singleton struct instance MUST define all error codes and messages in a central location
+- Error references MUST use the singleton instance fields (e.g., `Errors.InvalidRequest.Code`)
+- The singleton MUST use struct literal initialization for compile-time safety
+- HTTP status codes MAY be included in the error definition struct
+- Error definitions MUST be organized by category (validation, not found, conflict, internal)
+- New error types MUST be added to the singleton struct, NOT as inline strings
+
+**Rationale**: Hardcoded error strings lead to typos, inconsistencies, and make refactoring difficult. A singleton struct provides compile-time type safety, enables IDE autocomplete, makes errors discoverable, prevents string duplication, and allows centralized error message updates. This approach treats errors as first-class citizens in the type system.
+
+**Example Error Definition**:
+```go
+// Define error structure
+type ErrorCode struct {
+    Code       string
+    Message    string
+    HTTPStatus int
+}
+
+// Singleton instance with all error definitions
+var Errors = struct {
+    // Validation errors
+    InvalidRequest     ErrorCode
+    ValidationFailed   ErrorCode
+    MissingRequired    ErrorCode
+    
+    // Not found errors
+    NotFound           ErrorCode
+    TemplateNotFound   ErrorCode
+    ProductNotFound    ErrorCode
+    
+    // Conflict errors
+    Conflict           ErrorCode
+    DuplicateSKU       ErrorCode
+    DuplicateName      ErrorCode
+    
+    // Internal errors
+    InternalError      ErrorCode
+    DatabaseError      ErrorCode
+}{
+    // Validation errors
+    InvalidRequest:   ErrorCode{"INVALID_REQUEST", "Invalid request body", http.StatusBadRequest},
+    ValidationFailed: ErrorCode{"VALIDATION_ERROR", "Validation failed", http.StatusBadRequest},
+    MissingRequired:  ErrorCode{"MISSING_REQUIRED", "Required field missing", http.StatusBadRequest},
+    
+    // Not found errors
+    NotFound:         ErrorCode{"NOT_FOUND", "Resource not found", http.StatusNotFound},
+    TemplateNotFound: ErrorCode{"TEMPLATE_NOT_FOUND", "Template not found", http.StatusNotFound},
+    ProductNotFound:  ErrorCode{"PRODUCT_NOT_FOUND", "Product not found", http.StatusNotFound},
+    
+    // Conflict errors
+    Conflict:      ErrorCode{"CONFLICT", "Resource conflict", http.StatusConflict},
+    DuplicateSKU:  ErrorCode{"DUPLICATE_SKU", "SKU already exists", http.StatusConflict},
+    DuplicateName: ErrorCode{"DUPLICATE_NAME", "Name already exists", http.StatusConflict},
+    
+    // Internal errors
+    InternalError: ErrorCode{"INTERNAL_ERROR", "Internal server error", http.StatusInternalServerError},
+    DatabaseError: ErrorCode{"DATABASE_ERROR", "Database operation failed", http.StatusInternalServerError},
+}
+```
+
+**Usage in Handlers**:
+```go
+// CORRECT: Use singleton instance
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    var req pb.CreateProductRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        RespondWithError(w, Errors.InvalidRequest)
+        return
+    }
+    
+    product, err := h.service.Create(ctx, &req)
+    if err != nil {
+        if strings.Contains(err.Error(), "not found") {
+            RespondWithError(w, Errors.ProductNotFound)
+        } else if strings.Contains(err.Error(), "duplicate") {
+            RespondWithError(w, Errors.DuplicateSKU)
+        } else {
+            RespondWithError(w, Errors.InternalError)
+        }
+        return
+    }
+    
+    json.NewEncoder(w).Encode(product)
+}
+
+// WRONG: Do not use hardcoded strings
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    if err != nil {
+        ErrorResponse(w, "INVALID_REQUEST", "Invalid request body", 400) // Magic strings!
+        return
+    }
+}
+```
+
+**Helper Function**:
+```go
+// RespondWithError writes error response using singleton ErrorCode
+func RespondWithError(w http.ResponseWriter, errCode ErrorCode) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(errCode.HTTPStatus)
+    json.NewEncoder(w).Encode(&pb.ErrorResponse{
+        Code:    errCode.Code,
+        Message: errCode.Message,
+    })
+}
+```
+
 ## Technology Stack
 
 - **Language**: Go 1.21+ (recommend latest stable)
@@ -797,6 +909,8 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 - Reviewers MUST verify tests use database truncation for cleanup (defer pattern)
 - Reviewers MUST verify truncation handles all tables modified by test
 - Reviewers MUST verify truncation uses CASCADE for foreign key dependencies
+- Reviewers MUST verify error codes use singleton struct instances (no hardcoded strings)
+- Reviewers MUST verify new error types are added to singleton, not inline
 - Tests MUST be reviewed before implementation code
 
 ## Governance
@@ -807,7 +921,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 2. Changes MUST be reviewed by project lead or team
 3. Version MUST be incremented per semantic versioning:
    - **MAJOR**: Backward incompatible principle changes (e.g., removing no-mocking rule, allowing map[string]interface{})
-   - **MINOR**: New principles added or major expansions (e.g., adding protobuf requirement, adding tracing requirement)
+   - **MINOR**: New principles added or major expansions (e.g., adding protobuf requirement, adding tracing requirement, adding error definitions requirement)
    - **PATCH**: Clarifications, examples, typo fixes
 4. All dependent templates and documentation MUST be updated to reflect changes
 
@@ -822,4 +936,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.5.3 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.6.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16

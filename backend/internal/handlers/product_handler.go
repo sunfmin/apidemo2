@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,8 +35,8 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req pb.CreateProductRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		span.SetTag("error", true)
-		span.SetTag("error.message", "Invalid request body")
-		ErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
+		span.SetTag("error.message", Errors.InvalidRequest.Message)
+		RespondWithError(w, Errors.InvalidRequest)
 		return
 	}
 
@@ -183,7 +182,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/products/")
 	if id == "" {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Product ID required", http.StatusBadRequest)
+		RespondWithErrorMessage(w, Errors.InvalidRequest, "Product ID required")
 		return
 	}
 
@@ -191,7 +190,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req pb.UpdateProductRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
+		RespondWithError(w, Errors.InvalidRequest)
 		return
 	}
 
@@ -226,7 +225,7 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/v1/products/")
 	if id == "" {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Product ID required", http.StatusBadRequest)
+		RespondWithErrorMessage(w, Errors.InvalidRequest, "Product ID required")
 		return
 	}
 
@@ -261,7 +260,7 @@ func (h *ProductHandler) BulkUpdateStatus(w http.ResponseWriter, r *http.Request
 	var req pb.BulkUpdateStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		span.SetTag("error", true)
-		ErrorResponse(w, "INVALID_REQUEST", "Invalid request body", http.StatusBadRequest)
+		RespondWithError(w, Errors.InvalidRequest)
 		return
 	}
 
@@ -280,20 +279,26 @@ func (h *ProductHandler) BulkUpdateStatus(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleServiceError converts service errors to appropriate HTTP responses
+// HandleServiceError converts service errors to appropriate HTTP responses using typed error codes
 func HandleServiceError(w http.ResponseWriter, err error) {
 	errMsg := err.Error()
 
-	// Check for specific error patterns
+	// Check for specific error patterns and use typed error codes
 	switch {
+	case strings.Contains(errMsg, "template not found"):
+		RespondWithErrorMessage(w, Errors.TemplateNotFound, errMsg)
+	case strings.Contains(errMsg, "product not found"):
+		RespondWithErrorMessage(w, Errors.ProductNotFound, errMsg)
 	case strings.Contains(errMsg, "not found"), strings.Contains(errMsg, "record not found"):
-		ErrorResponse(w, "NOT_FOUND", errMsg, http.StatusNotFound)
-	case strings.Contains(errMsg, "duplicate"), strings.Contains(errMsg, "already exists"):
-		ErrorResponse(w, "CONFLICT", errMsg, http.StatusConflict)
+		RespondWithErrorMessage(w, Errors.NotFound, errMsg)
+	case strings.Contains(errMsg, "duplicate"), strings.Contains(errMsg, "SKU already"):
+		RespondWithErrorMessage(w, Errors.DuplicateSKU, errMsg)
+	case strings.Contains(errMsg, "already exists"):
+		RespondWithErrorMessage(w, Errors.Conflict, errMsg)
 	case strings.Contains(errMsg, "required"), strings.Contains(errMsg, "invalid"), strings.Contains(errMsg, "validation"), strings.Contains(errMsg, "must be"), strings.Contains(errMsg, "cannot be"), strings.Contains(errMsg, "not in allowed options"):
-		ErrorResponse(w, "VALIDATION_ERROR", errMsg, http.StatusBadRequest)
+		RespondWithErrorMessage(w, Errors.ValidationFailed, errMsg)
 	default:
-		ErrorResponse(w, "INTERNAL_ERROR", fmt.Sprintf("Internal server error: %s", errMsg), http.StatusInternalServerError)
+		RespondWithErrorMessage(w, Errors.InternalError, errMsg)
 	}
 }
 

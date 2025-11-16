@@ -62,7 +62,8 @@ description: "Task list template for feature implementation"
 - [ ] T007 [P] Configure environment variables for database URLs
 - [ ] T008 [P] Setup GORM AutoMigrate for database migrations
 - [ ] T009 [P] Configure OpenTracing global tracer (NoopTracer for tests, Jaeger/Zipkin for production)
-- [ ] T010 [P] Configure linting (golangci-lint) and formatting (gofmt, goimports)
+- [ ] T010 [P] Create type-safe error definitions singleton struct (error codes, messages, HTTP status)
+- [ ] T011 [P] Configure linting (golangci-lint) and formatting (gofmt, goimports)
 
 ---
 
@@ -72,17 +73,17 @@ description: "Task list template for feature implementation"
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T011 Create initial GORM models for core tables
-- [ ] T012 Create initial database migrations using GORM AutoMigrate
-- [ ] T013 [P] Setup HTTP router using standard net/http with http.ServeMux
-- [ ] T014 [P] Implement OpenTracing middleware to instrument all HTTP endpoints
-- [ ] T015 [P] Implement middleware: logging, recovery, CORS
-- [ ] T016 [P] Create GORM database connection pool and health check
-- [ ] T017 [P] Setup testcontainers test database helper (automatic container lifecycle, database truncation for test isolation)
-- [ ] T018 Implement base error response types and JSON marshaling
-- [ ] T019 [P] Create fixture helper utilities for test database population using GORM
-- [ ] T020 [P] Create table truncation helper function (truncate tables in reverse dependency order with CASCADE)
-- [ ] T021 [P] Verify OpenTracing spans are created for test requests
+- [ ] T012 Create initial GORM models for core tables
+- [ ] T013 Create initial database migrations using GORM AutoMigrate
+- [ ] T014 [P] Setup HTTP router using standard net/http with http.ServeMux
+- [ ] T015 [P] Implement OpenTracing middleware to instrument all HTTP endpoints
+- [ ] T016 [P] Implement middleware: logging, recovery, CORS
+- [ ] T017 [P] Create GORM database connection pool and health check
+- [ ] T018 [P] Setup testcontainers test database helper (automatic container lifecycle, database truncation for test isolation)
+- [ ] T019 Implement base error response types and JSON marshaling (use singleton error struct)
+- [ ] T020 [P] Create fixture helper utilities for test database population using GORM
+- [ ] T021 [P] Create table truncation helper function (truncate tables in reverse dependency order with CASCADE)
+- [ ] T022 [P] Verify OpenTracing spans are created for test requests
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
