@@ -85,7 +85,7 @@
 
 > **CRITICAL: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T031 [US1] HTTP integration test for POST /api/v1/templates in backend/tests/integration/template_test.go
+- [x] T031 [US1] HTTP integration test for POST /api/v1/templates in backend/tests/integration/template_test.go
   - Happy path: Create template with text, number, boolean, date, list, map, image, video attributes
   - Edge case: Empty template name (400)
   - Edge case: Duplicate template name (409 conflict)
@@ -103,7 +103,7 @@
   - Table-driven test structure
   - Cleanup with defer truncateTables(db, "product_templates")
 
-- [ ] T032 [US1] HTTP integration test for GET /api/v1/templates/{id} in backend/tests/integration/template_test.go
+- [x] T032 [US1] HTTP integration test for GET /api/v1/templates/{id} in backend/tests/integration/template_test.go
   - Happy path: Retrieve existing template
   - Edge case: Non-existent template ID (404)
   - Edge case: Invalid UUID format (400)
@@ -111,7 +111,7 @@
   - Verify protobuf comparison with protocmp
   - Table-driven test structure
 
-- [ ] T033 [US1] HTTP integration test for GET /api/v1/templates in backend/tests/integration/template_test.go
+- [x] T033 [US1] HTTP integration test for GET /api/v1/templates in backend/tests/integration/template_test.go
   - Happy path: List all templates with pagination
   - Edge case: Empty database (returns empty array)
   - Edge case: Pagination with page > total pages (empty results)
@@ -121,7 +121,7 @@
   - Verify pagination response metadata
   - Table-driven test structure
 
-- [ ] T034 [US1] HTTP integration test for PUT /api/v1/templates/{id} in backend/tests/integration/template_test.go
+- [x] T034 [US1] HTTP integration test for PUT /api/v1/templates/{id} in backend/tests/integration/template_test.go
   - Happy path: Update template name and attributes
   - Edge case: Non-existent template ID (404)
   - Edge case: Update to duplicate name (409)
@@ -132,7 +132,7 @@
   - Verify updated_at timestamp changes
   - Table-driven test structure
 
-- [ ] T035 [US1] HTTP integration test for DELETE /api/v1/templates/{id} in backend/tests/integration/template_test.go
+- [x] T035 [US1] HTTP integration test for DELETE /api/v1/templates/{id} in backend/tests/integration/template_test.go
   - Happy path: Delete template with no products
   - Edge case: Non-existent template ID (404)
   - Edge case: Delete template with products using it (409 or 400 with clear message)
@@ -142,26 +142,26 @@
 
 ### Implementation for User Story 1
 
-- [ ] T036 [P] [US1] Create ProductTemplate GORM model in backend/internal/models/template.go (ID, Name, Attributes JSONB, timestamps)
-- [ ] T037 [P] [US1] Create AttributeDefinition struct in backend/internal/models/template.go (for JSONB unmarshaling)
-- [ ] T038 [US1] Define TemplateService interface in backend/internal/services/template_service.go (Create, Get, List, Update, Delete methods)
-- [ ] T039 [US1] Implement TemplateService with dependency injection in backend/internal/services/template_service.go (inject *gorm.DB)
-- [ ] T040 [US1] Implement Create method with validation (name required, unique, attributes valid) in backend/internal/services/template_service.go
-- [ ] T041 [US1] Implement Get method with error handling (not found → error) in backend/internal/services/template_service.go
-- [ ] T042 [US1] Implement List method with pagination, search, and sorting in backend/internal/services/template_service.go
-- [ ] T043 [US1] Implement Update method with validation and conflict checking in backend/internal/services/template_service.go
-- [ ] T044 [US1] Implement Delete method with dependency checking (block if products exist) in backend/internal/services/template_service.go
-- [ ] T045 [US1] Create conversion helpers (GORM model ↔ protobuf) in backend/internal/services/template_service.go
-- [ ] T046 [US1] Create TemplateHandler struct in backend/internal/handlers/template_handler.go (inject TemplateService)
-- [ ] T047 [US1] Implement Create handler (POST /api/v1/templates) as thin wrapper in backend/internal/handlers/template_handler.go
-- [ ] T048 [US1] Add OpenTracing span for Create handler with tags (http.method, http.url, http.status_code) in backend/internal/handlers/template_handler.go
-- [ ] T049 [US1] Implement Get handler (GET /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
-- [ ] T050 [US1] Implement List handler (GET /api/v1/templates) in backend/internal/handlers/template_handler.go
-- [ ] T051 [US1] Implement Update handler (PUT /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
-- [ ] T052 [US1] Implement Delete handler (DELETE /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
+- [x] T036 [P] [US1] Create ProductTemplate GORM model in backend/internal/models/template.go (ID, Name, Attributes JSONB, timestamps)
+- [x] T037 [P] [US1] Create AttributeDefinition struct in backend/internal/models/template.go (for JSONB unmarshaling)
+- [x] T038 [US1] Define TemplateService interface in backend/internal/services/template_service.go (Create, Get, List, Update, Delete methods)
+- [x] T039 [US1] Implement TemplateService with dependency injection in backend/internal/services/template_service.go (inject *gorm.DB)
+- [x] T040 [US1] Implement Create method with validation (name required, unique, attributes valid) in backend/internal/services/template_service.go
+- [x] T041 [US1] Implement Get method with error handling (not found → error) in backend/internal/services/template_service.go
+- [x] T042 [US1] Implement List method with pagination, search, and sorting in backend/internal/services/template_service.go
+- [x] T043 [US1] Implement Update method with validation and conflict checking in backend/internal/services/template_service.go
+- [x] T044 [US1] Implement Delete method with dependency checking (block if products exist) in backend/internal/services/template_service.go
+- [x] T045 [US1] Create conversion helpers (GORM model ↔ protobuf) in backend/internal/services/template_service.go
+- [x] T046 [US1] Create TemplateHandler struct in backend/internal/handlers/template_handler.go (inject TemplateService)
+- [x] T047 [US1] Implement Create handler (POST /api/v1/templates) as thin wrapper in backend/internal/handlers/template_handler.go
+- [x] T048 [US1] Add OpenTracing span for Create handler with tags (http.method, http.url, http.status_code) in backend/internal/handlers/template_handler.go
+- [x] T049 [US1] Implement Get handler (GET /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
+- [x] T050 [US1] Implement List handler (GET /api/v1/templates) in backend/internal/handlers/template_handler.go
+- [x] T051 [US1] Implement Update handler (PUT /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
+- [x] T052 [US1] Implement Delete handler (DELETE /api/v1/templates/{id}) in backend/internal/handlers/template_handler.go
 - [ ] T053 [US1] Register template routes in backend/cmd/server/main.go (connect handlers to ServeMux)
-- [ ] T054 [US1] Create fixture helper for templates in backend/tests/testutil/fixtures.go (createTemplateFixture function)
-- [ ] T055 [US1] Run all US1 integration tests and verify they pass
+- [x] T054 [US1] Create fixture helper for templates in backend/tests/testutil/db.go (CreateTemplateFixture function)
+- [x] T055 [US1] Run all US1 integration tests and verify they pass
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently. Administrators can create and manage product templates.
 
