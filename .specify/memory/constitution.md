@@ -1,22 +1,26 @@
 <!--
 Sync Impact Report:
-- Version: 1.5.0 → 1.5.1 (PATCH bump - clarify that HTTP integration tests cover full stack, no separate service tests)
-- Modified principles: None
+- Version: 1.5.1 → 1.5.2 (PATCH bump - clarify tracing granularity: service operations, not individual SQL)
+- Modified principles:
+  - VII. Distributed Tracing - clarified NOT to trace individual SQL executions
 - Clarifications added:
-  - HTTP integration tests cover full stack (HTTP → Service → Repository)
-  - No need for separate service layer tests (would be redundant)
-  - Integration tests through HTTP layer test business logic thoroughly
+  - Trace at service operation level (e.g., "ProductService.Create")
+  - Do NOT trace individual SQL queries (too much overhead)
+  - Use database logging/metrics for SQL query analysis instead
+  - Keep tracing focused on request flow and service boundaries
 - Rationale:
-  - Avoid test duplication - HTTP integration tests already test services
-  - Simpler testing approach - one integration test per endpoint
-  - HTTP tests exercise the full stack including business logic
-  - Service layer architecture benefits remain (code reuse, DI, embeddability)
+  - Individual SQL tracing creates excessive overhead (spans, storage, bandwidth)
+  - Overwhelming trace data makes debugging harder (too much noise)
+  - Most SQL queries are fast and don't need individual spans
+  - Database query analysis better served by database metrics/slow query logs
+  - Tracing should focus on inter-service communication and operation flow
 - Impact:
-  - Tests only at HTTP layer (using httptest + real database)
-  - Services still separated for reusability, just not tested separately
-  - Clearer testing guidance - no confusion about what to test
+  - Fewer spans created (less overhead, cleaner traces)
+  - Service-level spans still show database operation timing
+  - Use pg_stat_statements or database logs for SQL-level analysis
+  - Clearer guidance on what to trace
 - Templates requiring updates:
-  ✅ .specify/templates/tasks-template.md (Remove separate service layer test tasks)
+  ✅ No template changes needed
 -->
 
 
@@ -158,20 +162,22 @@ if actual != expected { // Incorrect for protobuf
 
 ### VII. Distributed Tracing (OpenTracing)
 
-All API endpoints MUST be instrumented with distributed tracing:
+All API endpoints MUST be instrumented with distributed tracing at appropriate granularity:
 - Each HTTP endpoint handler MUST create or continue an OpenTracing span
 - Spans MUST include operation name matching the endpoint (e.g., "POST /api/products")
-- Database operations MUST be traced as child spans with operation details
-- External service calls MUST propagate trace context
+- Service method calls SHOULD create child spans (e.g., "ProductService.Create")
+- Database operations SHOULD be traced as a single child span per transaction (NOT per SQL query)
+- Individual SQL queries MUST NOT be traced (too much overhead, use database metrics instead)
+- External service calls (HTTP, gRPC) MUST propagate trace context and create spans
 - Error conditions MUST be logged to the active span with `span.SetTag("error", true)`
 - Trace context MUST be extracted from incoming HTTP headers (e.g., `X-B3-TraceId`)
 - Trace context MUST be injected into outgoing HTTP requests
-- Spans MUST include relevant tags: `http.method`, `http.url`, `http.status_code`
+- Spans MUST include relevant tags: `http.method`, `http.url`, `http.status_code`, `service.method`
 - Tests MUST verify tracing instrumentation (e.g., using mock tracer or test spans)
 
-**Rationale**: Distributed tracing provides critical observability for debugging latency issues, understanding request flows across services, identifying bottlenecks, and correlating logs across distributed systems. OpenTracing offers a vendor-neutral API compatible with Jaeger, Zipkin, and other tracing backends.
+**Rationale**: Distributed tracing provides critical observability for debugging latency issues, understanding request flows across services, identifying bottlenecks, and correlating logs across distributed systems. OpenTracing offers a vendor-neutral API compatible with Jaeger, Zipkin, and other tracing backends. Tracing at service operation level (not individual SQL queries) keeps overhead low while providing actionable insights. For SQL query analysis, use database-specific tools like `pg_stat_statements`, slow query logs, or APM database profiling.
 
-**Example**:
+**Example - Correct Tracing Granularity**:
 ```go
 import (
     "net/http"
@@ -179,8 +185,9 @@ import (
     "github.com/opentracing/opentracing-go/ext"
 )
 
-func ProductCreateHandler(w http.ResponseWriter, r *http.Request) {
-    // Extract or start trace span
+// HTTP Handler - creates root span
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    // Extract or start HTTP span
     spanCtx, _ := opentracing.GlobalTracer().Extract(
         opentracing.HTTPHeaders,
         opentracing.HTTPHeadersCarrier(r.Header),
@@ -188,19 +195,68 @@ func ProductCreateHandler(w http.ResponseWriter, r *http.Request) {
     span := opentracing.StartSpan("POST /api/products", ext.RPCServerOption(spanCtx))
     defer span.Finish()
     
-    // Add tags
     span.SetTag("http.method", r.Method)
     span.SetTag("http.url", r.URL.String())
     
-    // Database operation as child span
-    dbSpan := opentracing.StartSpan("db.insert_product", opentracing.ChildOf(span.Context()))
-    // ... database work ...
-    dbSpan.Finish()
+    // Parse request
+    var req pb.ProductCreateRequest
+    json.NewDecoder(r.Body).Decode(&req)
     
-    // Set response status
+    // Service call creates child span (one span for entire operation)
+    ctx := opentracing.ContextWithSpan(r.Context(), span)
+    product, err := h.service.Create(ctx, &req)
+    
+    if err != nil {
+        span.SetTag("error", true)
+        span.SetTag("error.message", err.Error())
+        http.Error(w, err.Error(), 500)
+        return
+    }
+    
     span.SetTag("http.status_code", http.StatusCreated)
+    json.NewEncoder(w).Encode(product)
 }
+
+// Service - creates child span for business logic
+func (s *productService) Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+    span, ctx := opentracing.StartSpanFromContext(ctx, "ProductService.Create")
+    defer span.Finish()
+    
+    span.SetTag("product.name", req.Name)
+    
+    // Entire database transaction in this span
+    // DO NOT create spans for individual SQL queries
+    tx := s.db.WithContext(ctx).Begin()
+    defer tx.Rollback()
+    
+    product := &Product{Name: req.Name, SKU: req.Sku}
+    if err := tx.Create(product).Error; err != nil {
+        span.SetTag("error", true)
+        return nil, err
+    }
+    
+    if err := tx.Commit().Error; err != nil {
+        span.SetTag("error", true)
+        return nil, err
+    }
+    
+    return toProto(product), nil
+}
+
+// Result: Clean trace hierarchy
+// POST /api/products (100ms)
+//   └─ ProductService.Create (95ms)  ← Database work included here
+//
+// NOT this (too noisy):
+// POST /api/products (100ms)
+//   └─ ProductService.Create (95ms)
+//       ├─ db.begin (1ms)
+//       ├─ db.insert (50ms)
+//       ├─ db.select (30ms)
+//       └─ db.commit (10ms)  ← Too much detail!
 ```
+
+**For SQL Query Analysis**: Use PostgreSQL's `pg_stat_statements` extension, slow query logs, or database monitoring tools (not distributed tracing).
 
 ### VIII. Service Layer Architecture (Dependency Injection)
 
@@ -721,4 +777,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.5.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.5.2 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
