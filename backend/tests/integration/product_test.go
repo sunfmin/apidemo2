@@ -222,12 +222,12 @@ func TestProductHandler_Create(t *testing.T) {
 					}
 				}
 
-				// Build expected response
+				// Build expected response from REQUEST data (not response)
 				expectedResponse := &pb.CreateProductResponse{
 					Product: &pb.Product{
-						Id:              response.Product.Id,              // Use actual generated ID
+						Id:              response.Product.Id,         // Generated (OK to copy)
 						TemplateId:      tc.request.TemplateId,
-						TemplateName:    response.Product.TemplateName,    // Use actual template name
+						TemplateName:    "Electronics",               // From template fixture
 						Name:            tc.request.Name,
 						Sku:             tc.request.Sku,
 						Description:     tc.request.Description,
@@ -238,12 +238,12 @@ func TestProductHandler_Create(t *testing.T) {
 						TotalStock:      tc.request.InitialStock,
 						AvailableStock:  tc.request.InitialStock, // Initially no reserved stock
 						ReservedStock:   0,
-						AttributeValues: expectedAttributeValues, // Expected attributes with Type field
+						AttributeValues: expectedAttributeValues,     // From request
 						Status:          tc.request.Status,
-						CreatedAt:       response.Product.CreatedAt,       // Use actual timestamp
-						UpdatedAt:       response.Product.UpdatedAt,       // Use actual timestamp
-						VariantCount:    0,                                // No variants yet
-						PrimaryImageUrls: []string{},                      // No images yet
+						CreatedAt:       response.Product.CreatedAt,  // Generated (OK to copy)
+						UpdatedAt:       response.Product.UpdatedAt,  // Generated (OK to copy)
+						VariantCount:    0,
+						PrimaryImageUrls: []string{},
 					},
 				}
 
@@ -278,11 +278,12 @@ func TestProductHandler_Get(t *testing.T) {
 		{"name":"Model","type":"text","required":true}
 	]`)
 
-	// Create a product fixture with pricing and inventory
-	product := testutil.CreateProductFixture(db, template.ID, "Test Product", "TEST-GET-001", `{
+	// Create a product fixture with known attribute values
+	productAttrs := `{
 		"Brand":{"type":"ATTRIBUTE_TYPE_TEXT","value":"Apple"},
 		"Model":{"type":"ATTRIBUTE_TYPE_TEXT","value":"MacBook Pro"}
-	}`)
+	}`
+	product := testutil.CreateProductFixture(db, template.ID, "Test Product", "TEST-GET-001", productAttrs)
 
 	// Create pricing
 	pricing := &models.ProductPricing{
@@ -359,26 +360,38 @@ func TestProductHandler_Get(t *testing.T) {
 					t.Fatal("Expected product in response")
 				}
 
-				// Build expected response
+				// Build expected attribute values from FIXTURE data (not response)
+				expectedAttrs := map[string]*pb.AttributeValue{
+					"Brand": {
+						Type:      pb.AttributeType_ATTRIBUTE_TYPE_TEXT,
+						TextValue: "Apple",
+					},
+					"Model": {
+						Type:      pb.AttributeType_ATTRIBUTE_TYPE_TEXT,
+						TextValue: "MacBook Pro",
+					},
+				}
+
+				// Build expected response from FIXTURE data (not response)
 				expectedResponse := &pb.GetProductResponse{
 					Product: &pb.Product{
-						Id:             product.ID,
-						TemplateId:     template.ID,
-						TemplateName:   template.Name,
-						Name:           product.Name,
-						Sku:            product.SKU,
-						Description:    product.Description,
-						ListPrice:      pricing.ListPrice,
-						SalePrice:      pricing.SalePrice,
-						EffectivePrice: pricing.SalePrice, // Sale price is set
-						Currency:       pricing.Currency,
-						TotalStock:     inventory.OnHandQuantity,
-						AvailableStock: inventory.OnHandQuantity,
-						ReservedStock:  0,
-						AttributeValues: response.Product.AttributeValues, // Use actual from response
-						Status:          response.Product.Status,
-						CreatedAt:       response.Product.CreatedAt,
-						UpdatedAt:       response.Product.UpdatedAt,
+						Id:              response.Product.Id,         // Generated (OK to copy)
+						TemplateId:      template.ID,
+						TemplateName:    template.Name,
+						Name:            product.Name,
+						Sku:             product.SKU,
+						Description:     product.Description,
+						ListPrice:       pricing.ListPrice,
+						SalePrice:       pricing.SalePrice,
+						EffectivePrice:  pricing.SalePrice, // Sale price is set
+						Currency:        pricing.Currency,
+						TotalStock:      inventory.OnHandQuantity,
+						AvailableStock:  inventory.OnHandQuantity,
+						ReservedStock:   0,
+						AttributeValues: expectedAttrs,               // From fixture (not response)
+						Status:          pb.ProductStatus_PRODUCT_STATUS_ACTIVE, // Default from fixture
+						CreatedAt:       response.Product.CreatedAt,  // Generated (OK to copy)
+						UpdatedAt:       response.Product.UpdatedAt,  // Generated (OK to copy)
 						VariantCount:    0,
 						PrimaryImageUrls: []string{},
 					},

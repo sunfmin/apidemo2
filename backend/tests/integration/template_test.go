@@ -237,8 +237,9 @@ func TestTemplateHandler_Get(t *testing.T) {
 	templateService := services.NewTemplateService(db)
 	handler := handlers.NewTemplateHandler(templateService)
 
-	// Create a fixture template
-	fixture := testutil.CreateTemplateFixture(db, "Test Template", "")
+	// Create a fixture template with known attributes
+	fixtureAttrs := `[{"name":"Size","type":"ATTRIBUTE_TYPE_TEXT","required":true}]`
+	fixture := testutil.CreateTemplateFixture(db, "Test Template", fixtureAttrs)
 
 	// Table-driven test cases
 	testCases := []struct {
@@ -293,14 +294,23 @@ func TestTemplateHandler_Get(t *testing.T) {
 					t.Fatal("Expected template in response")
 				}
 
-				// Build expected response using fixture data and actual generated fields
+				// Build expected attributes from FIXTURE data (not response)
+				expectedAttrs := []*pb.AttributeDefinition{
+					{
+						Name:     "Size",
+						Type:     pb.AttributeType_ATTRIBUTE_TYPE_TEXT,
+						Required: true,
+					},
+				}
+
+				// Build expected response from FIXTURE data (not response)
 				expectedResponse := &pb.GetTemplateResponse{
 					Template: &pb.ProductTemplate{
-						Id:        tc.templateID,
-						Name:      fixture.Name,
-						Attributes: response.Template.Attributes, // Use actual attributes from response
-						CreatedAt: response.Template.CreatedAt,   // Use actual timestamp
-						UpdatedAt: response.Template.UpdatedAt,   // Use actual timestamp
+						Id:         tc.templateID,
+						Name:       fixture.Name,
+						Attributes: expectedAttrs,                    // From fixture (not response)
+						CreatedAt:  response.Template.CreatedAt,      // Generated (OK to copy)
+						UpdatedAt:  response.Template.UpdatedAt,      // Generated (OK to copy)
 					},
 				}
 
@@ -404,8 +414,9 @@ func TestTemplateHandler_Update(t *testing.T) {
 	templateService := services.NewTemplateService(db)
 	handler := handlers.NewTemplateHandler(templateService)
 
-	// Create a fixture template
-	fixture := testutil.CreateTemplateFixture(db, "Original Name", "")
+	// Create a fixture template with known attributes
+	fixtureAttrs := `[{"name":"Color","type":"ATTRIBUTE_TYPE_LIST","required":true,"options":["Red","Blue","Green"]}]`
+	fixture := testutil.CreateTemplateFixture(db, "Original Name", fixtureAttrs)
 
 	// Table-driven test cases
 	testCases := []struct {
@@ -470,14 +481,30 @@ func TestTemplateHandler_Update(t *testing.T) {
 					t.Error("Expected UpdatedAt to be set")
 				}
 
-				// Build expected response
+				// Build expected attributes from REQUEST (or fixture if not updated)
+				var expectedAttrs []*pb.AttributeDefinition
+				if tc.request.Attributes != nil && len(tc.request.Attributes) > 0 {
+					expectedAttrs = tc.request.Attributes
+				} else {
+					// Use fixture attributes if request doesn't update them
+					expectedAttrs = []*pb.AttributeDefinition{
+						{
+							Name:     "Color",
+							Type:     pb.AttributeType_ATTRIBUTE_TYPE_LIST,
+							Required: true,
+							Options:  []string{"Red", "Blue", "Green"},
+						},
+					}
+				}
+
+				// Build expected response from REQUEST/FIXTURE data (not response)
 				expectedResponse := &pb.UpdateTemplateResponse{
 					Template: &pb.ProductTemplate{
-						Id:        tc.templateID,
-						Name:      tc.request.Name,
-						Attributes: response.Template.Attributes, // Use actual attributes from response
-						CreatedAt: response.Template.CreatedAt,   // Use actual CreatedAt from response
-						UpdatedAt: response.Template.UpdatedAt,   // Use actual UpdatedAt from response
+						Id:         tc.templateID,
+						Name:       tc.request.Name,
+						Attributes: expectedAttrs,                    // From request/fixture (not response)
+						CreatedAt:  response.Template.CreatedAt,      // Generated (OK to copy)
+						UpdatedAt:  response.Template.UpdatedAt,      // Generated (OK to copy)
 					},
 				}
 
