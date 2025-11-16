@@ -103,6 +103,13 @@
 - Invalid Content-Type
 - Malformed JSON/request body
 
+**Observability & Tracing**:
+- Verify OpenTracing spans are created for each endpoint
+- Verify trace context propagation across service boundaries
+- Verify span tags include http.method, http.url, http.status_code
+- Verify error spans are tagged with error=true
+- Verify child spans are created for database operations
+
 ## Requirements *(mandatory)*
 
 <!--

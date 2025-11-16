@@ -17,25 +17,25 @@
   the iteration process.
 -->
 
-**Language/Version**: Go 1.21+ (or specify version)  
-**Primary Dependencies**: net/http (or framework like Chi/Echo/Gin), pgx or database/sql driver  
-**Storage**: PostgreSQL (real database for all tests)  
-**Testing**: Go testing package with httptest, table-driven integration tests  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Language/Version**: Go 1.21+ (latest stable recommended)  
+**HTTP Framework**: Standard library `net/http` (MANDATORY per constitution)  
+**Database**: PostgreSQL 15+ with JSONB support  
+**Database Access**: GORM (gorm.io/gorm) (MANDATORY per constitution)  
+**Distributed Tracing**: OpenTracing (github.com/opentracing/opentracing-go) (MANDATORY per constitution)  
+**Protocol Buffers**: protoc compiler, protoc-gen-go for API contracts  
+**Testing**: Standard library `testing` with `httptest`, Docker PostgreSQL container (MANDATORY per constitution)  
+**Test Comparison**: google/go-cmp with protocmp for protobuf assertions  
+**Target Platform**: [e.g., Linux server, containerized deployment or NEEDS CLARIFICATION]  
 **Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, p99 < 200ms or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 100k requests/day or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- ✅ **Integration Testing First**: All tests use real PostgreSQL database (no mocking)
-- ✅ **Table-Driven Tests**: All tests follow table-driven pattern with test case structs
-- ✅ **Edge Case Coverage**: Tests include input validation, boundary conditions, auth errors, data state, database errors, HTTP specifics
-- ✅ **Real Database Fixtures**: Test data prepared via real database operations
-- ✅ **ServeHTTP Testing**: Endpoints tested through httptest.ResponseRecorder and actual HTTP handlers
+[Gates determined based on constitution file]
 
 ## Project Structure
 
