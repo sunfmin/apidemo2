@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package pim.v1;
+
+option go_package = "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1;pimv1";
+
+import "common.proto";
+import "google/protobuf/timestamp.proto";
+
+// ProductTemplate represents a template definition
+message ProductTemplate {
+  string id = 1;
+  string name = 2;
+  repeated AttributeDefinition attributes = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  int32 product_count = 6; // Number of products using this template
+}
+
+// CreateTemplateRequest
+message CreateTemplateRequest {
+  string name = 1; // Required, 1-255 characters, unique
+  repeated AttributeDefinition attributes = 2; // Required, at least one attribute
+}
+
+// CreateTemplateResponse
+message CreateTemplateResponse {
+  ProductTemplate template = 1;
+}
+
+// GetTemplateRequest
+message GetTemplateRequest {
+  string id = 1; // Required, UUID
+}
+
+// GetTemplateResponse
+message GetTemplateResponse {
+  ProductTemplate template = 1;
+}
+
+// ListTemplatesRequest
+message ListTemplatesRequest {
+  PaginationRequest pagination = 1;
+  string search = 2; // Optional, search by name
+  string sort_by = 3; // Optional, field to sort by (name, created_at, updated_at)
+  string sort_order = 4; // Optional, "asc" or "desc" (default: "asc")
+}
+
+// ListTemplatesResponse
+message ListTemplatesResponse {
+  repeated ProductTemplate templates = 1;
+  PaginationResponse pagination = 2;
+}
+
+// UpdateTemplateRequest
+message UpdateTemplateRequest {
+  string id = 1; // Required, UUID
+  string name = 2; // Optional, if provided must be unique
+  repeated AttributeDefinition attributes = 3; // Optional, if provided replaces all attributes
+}
+
+// UpdateTemplateResponse
+message UpdateTemplateResponse {
+  ProductTemplate template = 1;
+}
+
+// DeleteTemplateRequest
+message DeleteTemplateRequest {
+  string id = 1; // Required, UUID
+}
+
+// DeleteTemplateResponse
+message DeleteTemplateResponse {
+  bool success = 1;
+  string message = 2; // Optional, message if deletion failed due to products using template
+}
+
+// Template API endpoints:
+// POST   /api/v1/templates          - Create template
+// GET    /api/v1/templates/{id}     - Get template by ID
+// GET    /api/v1/templates          - List templates (with pagination and search)
+// PUT    /api/v1/templates/{id}     - Update template
+// DELETE /api/v1/templates/{id}     - Delete template (only if no products use it)
+

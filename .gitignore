@@ -1,0 +1,170 @@
+# Flexible PIM System - Git Ignore
+
+# ==================
+# Go Backend
+# ==================
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace
+/backend/bin/
+/backend/pkg/
+vendor/
+
+# Go test coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# ==================
+# Frontend (Node.js/TypeScript)
+# ==================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Frontend dependencies and lock files (keep one, ignore others)
+# Uncomment based on your package manager preference
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ==================
+# Storage & Media
+# ==================
+# Local media storage (images, videos, thumbnails)
+/storage/media/
+
+# ==================
+# Environment & Config
+# ==================
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+config.local.yaml
+config.*.local.yaml
+
+# ==================
+# IDE & Editors
+# ==================
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs (GoLand, WebStorm, IntelliJ)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*.swn
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ==================
+# Operating System
+# ==================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ==================
+# Logs & Temporary Files
+# ==================
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.cache
+
+# ==================
+# Database
+# ==================
+# PostgreSQL dumps
+*.sql
+*.dump
+
+# SQLite (if used for testing)
+*.db
+*.sqlite
+*.sqlite3
+
+# ==================
+# Docker (if used)
+# ==================
+# Docker volumes
+docker-compose.override.yml
+
+# ==================
+# Protocol Buffers
+# ==================
+# Keep .proto files, ignore generated code in specific locations
+/backend/api/gen/
+
+# ==================
+# Testing
+# ==================
+# Test artifacts
+*.test
+*.prof
+*.pprof
+
+# ==================
+# CI/CD
+# ==================
+.gitlab-ci-local/
+.github-actions-local/
+
+# ==================
+# Other
+# ==================
+# Temporary API keys or credentials
+*.key
+*.pem
+*.cert
+*.crt
+secrets/
+credentials/
+

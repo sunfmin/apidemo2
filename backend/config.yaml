@@ -1,0 +1,40 @@
+server:
+  port: 8080
+  host: localhost
+
+database:
+  # For local development - update these values
+  host: localhost
+  port: 5432
+  database: pim_dev
+  username: postgres
+  password: postgres
+  ssl_mode: disable
+  # Note: Tests use testcontainers-go with automatic PostgreSQL management
+
+storage:
+  type: local  # Options: "local" or "s3"
+  base_path: ./storage/media
+  base_url: http://localhost:8080/media
+
+media:
+  max_image_size_bytes: 10485760   # 10MB
+  max_video_size_bytes: 104857600  # 100MB
+  thumbnail_width: 300
+  thumbnail_height: 300
+  allowed_image_types:
+    - image/jpeg
+    - image/png
+    - image/gif
+    - image/webp
+  allowed_video_types:
+    - video/mp4
+    - video/webm
+    - video/quicktime  # .mov files
+
+tracing:
+  enabled: false  # Set to true in production with proper backend
+  service_name: pim-api
+  # For development/testing: Uses NoopTracer
+  # For production: Configure Jaeger, Zipkin, or other OpenTracing backend
+
