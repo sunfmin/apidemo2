@@ -1,26 +1,25 @@
 <!--
 Sync Impact Report:
-- Version: 1.5.3 → 1.6.0 (MINOR bump - new principle added: Type-Safe Error Definitions)
-- New principles:
-  - IX. Type-Safe Error Definitions - require singleton struct for error codes/messages
-- Requirements added:
-  - Error codes and messages MUST NOT be hardcoded strings
-  - Singleton struct instance MUST define all errors in central location
-  - Error references MUST use singleton fields (e.g., Errors.InvalidRequest.Code)
-  - HTTP status codes MAY be included in error struct
-  - Errors organized by category (validation, not found, conflict, internal)
+- Version: 1.6.0 → 1.6.1 (PATCH bump - clarify test assertion best practices)
+- Modified principles:
+  - VI. Protobuf Data Structures - clarified test expected values must be built from REQUEST data
+- Clarifications added:
+  - Expected test data MUST be built from request data (what you sent)
+  - MUST NOT copy response data into expected values (defeats testing purpose)
+  - Generated fields (ID, timestamps) are the ONLY exception - copy from response
+  - Added examples showing correct vs incorrect expected value construction
+  - Added guidance on handling generated fields (3 options)
 - Rationale:
-  - Hardcoded strings lead to typos, inconsistencies, difficult refactoring
-  - Singleton struct provides compile-time type safety and IDE autocomplete
-  - Makes errors discoverable and prevents duplication
-  - Treats errors as first-class citizens in type system
+  - Using response data as expected data creates tests that always pass
+  - Tests must validate that what you SENT matches what came BACK
+  - Only generated fields (unpredictable) should be copied from response
+  - This ensures tests actually verify API behavior correctness
 - Impact:
-  - New error definitions package must be created
-  - Existing hardcoded error strings should be refactored to use singleton
-  - Better type safety and error consistency across codebase
+  - Existing tests should be reviewed for response data leaking into expectations
+  - Better test quality and actual bug detection
+  - Tests properly validate API contract fulfillment
 - Templates requiring updates:
-  ✅ tasks-template.md - will add error definitions to setup phase
-  ✅ Code review requirements updated
+  ✅ No template changes needed (guidance is in examples)
 -->
 
 
@@ -101,6 +100,9 @@ All public API data structures MUST be defined in Protocol Buffers:
 - Tests MUST NOT use standard `==` or `reflect.DeepEqual` for protobuf message comparison
 - Tests MUST NOT use individual field comparisons (e.g., `if response.Name != expected.Name`) for protobuf messages
 - ALL protobuf message assertions in tests MUST use `cmp.Diff()` with `protocmp.Transform()` to compare entire messages
+- Expected test data MUST be built from REQUEST data (what you sent), NOT from RESPONSE data
+- Copying response data into expected values defeats the purpose of testing (test will always pass)
+- Generated fields (ID, timestamps) are the ONLY exception - these can be copied from response
 - Individual field checks are ONLY acceptable for non-protobuf types (e.g., checking if a string ID is not empty before comparison)
 
 **Rationale**: Protobuf provides compile-time type safety, eliminates runtime type assertion errors, enables automatic validation, supports multiple language clients, enforces schema-first API design, and prevents the fragile `map[string]interface{}` pattern that loses type information and requires extensive runtime validation. Proper protobuf comparison ensures correct field comparison including unknown fields, extensions, and proto semantics. Individual field comparisons miss structural differences, ignore unknown fields, and fail to validate the complete message structure, leading to incomplete test coverage.
@@ -149,58 +151,87 @@ import (
     "google.golang.org/protobuf/testing/protocmp"
 )
 
-// CORRECT: Use protocmp for complete protobuf message comparison
-expected := &pb.Product{
-    Id:   "123",
-    Name: "Test Product",
-    Sku:  "TEST-001",
-    Description: "Test description",
-}
-actual := &pb.Product{
-    Id:   "123",
-    Name: "Test Product",
-    Sku:  "TEST-001",
-    Description: "Test description",
-}
-
-// Compare entire messages - catches all differences
-if diff := cmp.Diff(expected, actual, protocmp.Transform()); diff != "" {
-    t.Errorf("Product mismatch (-want +got):\n%s", diff)
-}
-
-// CORRECT: For response validation, compare entire response message
+// CORRECT: Build expected from REQUEST data (what you sent)
 var response pb.CreateProductResponse
 json.NewDecoder(rec.Body).Decode(&response)
 
+// Build expected from the request, NOT from response
 expectedResponse := &pb.CreateProductResponse{
     Product: &pb.Product{
-        Id:   "123",
-        Name: "Test Product",
-        Sku:  "TEST-001",
+        Id:          response.Product.Id,        // Use generated ID from response
+        Name:        requestData.Name,           // From request (what you sent)
+        Sku:         requestData.Sku,            // From request
+        Description: requestData.Description,    // From request
+        Price:       requestData.Price,          // From request
+        CreatedAt:   response.Product.CreatedAt, // Use generated timestamp
+        UpdatedAt:   response.Product.UpdatedAt, // Use generated timestamp
     },
 }
 
+// Compare entire messages - validates request data matches response
 if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
     t.Errorf("Response mismatch (-want +got):\n%s", diff)
 }
 
-// WRONG: Do not use == or DeepEqual
-if actual != expected { // Incorrect for protobuf
-    t.Error("mismatch")
+// ALTERNATIVE: Ignore generated fields in comparison
+if diff := cmp.Diff(expectedResponse, &response, 
+    protocmp.Transform(),
+    protocmp.IgnoreFields(&pb.Product{}, "id", "created_at", "updated_at"),
+); diff != "" {
+    t.Errorf("Response mismatch (-want +got):\n%s", diff)
 }
+
+// WRONG: Using response data as expected data
+expectedResponse := &pb.CreateProductResponse{
+    Product: &pb.Product{
+        Name:  response.Product.Name,  // WRONG! Copying from response
+        Price: response.Product.Price, // WRONG! This doesn't test anything!
+    },
+}
+// This test will always pass even if API returns wrong data!
 
 // WRONG: Do not use individual field comparisons
 if response.Product.Name != expectedResponse.Product.Name { // Misses other fields!
     t.Error("name mismatch")
 }
-if response.Product.Sku != expectedResponse.Product.Sku { // Incomplete validation!
-    t.Error("sku mismatch")
-}
 
-// WRONG: Do not use reflect.DeepEqual
-if !reflect.DeepEqual(actual, expected) { // Incorrect for protobuf
+// WRONG: Do not use == or reflect.DeepEqual
+if actual != expected { // Incorrect for protobuf
     t.Error("mismatch")
 }
+```
+
+**Handling Generated Fields**:
+```go
+// Option 1: Use generated values from response (for ID, timestamps)
+expected := &pb.Product{
+    Id:        response.Product.Id,        // Can't predict generated UUID
+    Name:      "Expected Name",            // From request
+    CreatedAt: response.Product.CreatedAt, // Can't predict exact timestamp
+}
+
+// Option 2: Ignore generated fields in comparison
+expected := &pb.Product{
+    Name:  "Expected Name",
+    Price: 99.99,
+}
+if diff := cmp.Diff(expected, actual, 
+    protocmp.Transform(),
+    protocmp.IgnoreFields(&pb.Product{}, "id", "created_at", "updated_at"),
+); diff != "" {
+    t.Errorf("Mismatch: %s", diff)
+}
+
+// Option 3: Validate generated fields separately, then nil them out
+if response.Id == "" {
+    t.Error("Expected ID to be generated")
+}
+if response.CreatedAt == nil {
+    t.Error("Expected CreatedAt to be set")
+}
+// Then set to nil for comparison
+expected.Id = response.Id
+expected.CreatedAt = response.CreatedAt
 ```
 
 ### VII. Distributed Tracing (OpenTracing)
@@ -936,4 +967,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.6.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.6.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
