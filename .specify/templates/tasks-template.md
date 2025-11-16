@@ -8,7 +8,7 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Integration tests are MANDATORY per constitution. All tests use real PostgreSQL database via Docker container (no mocking), follow table-driven patterns, use GORM for fixtures, use protobuf structs (NOT maps), verify OpenTracing instrumentation, and cover comprehensive edge cases.
+**Tests**: Integration tests are MANDATORY per constitution. All tests use real PostgreSQL database via testcontainers-go (no mocking), follow table-driven patterns, use GORM for fixtures, use protobuf structs (NOT maps), verify OpenTracing instrumentation, and cover comprehensive edge cases.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -22,9 +22,9 @@ description: "Task list template for feature implementation"
 
 - **Go project**: Root level for `main.go`, packages in subdirectories, `*_test.go` files alongside source
 - **Test organization**: Integration tests in `*_test.go` files (no separate `tests/` directory per Go convention)
-- **Test database**: Use Docker PostgreSQL container, configure via environment variables
+- **Test database**: Use testcontainers-go for automatic PostgreSQL container management
 - **Database access**: Use GORM for all database operations (models, queries, migrations)
-- **HTTP framework**: Use standard net/http (http.ServeMux or custom routing, NO external routers)
+- **HTTP framework**: Use standard net/http with http.ServeMux (NO external routers)
 - **Tracing**: Use OpenTracing for all endpoint instrumentation
 - Paths shown below assume Go project structure - adjust based on plan.md
 
@@ -55,10 +55,10 @@ description: "Task list template for feature implementation"
 - [ ] T002 [P] Install GORM dependencies: `go get -u gorm.io/gorm gorm.io/driver/postgres`
 - [ ] T003 [P] Install OpenTracing dependency: `go get -u github.com/opentracing/opentracing-go`
 - [ ] T004 [P] Install Protocol Buffers dependencies: `go get -u google.golang.org/protobuf/testing/protocmp`
-- [ ] T005 [P] Setup Docker PostgreSQL test container configuration (docker-compose.yml or test helper)
+- [ ] T005 [P] Install testcontainers-go: `go get -u github.com/testcontainers/testcontainers-go github.com/testcontainers/testcontainers-go/modules/postgres`
 - [ ] T006 [P] Setup GORM connection and database configuration
 - [ ] T007 [P] Configure environment variables for database URLs
-- [ ] T008 [P] Setup database migration framework (GORM AutoMigrate, golang-migrate, or goose)
+- [ ] T008 [P] Setup GORM AutoMigrate for database migrations
 - [ ] T009 [P] Configure OpenTracing global tracer (NoopTracer for tests, Jaeger/Zipkin for production)
 - [ ] T010 [P] Configure linting (golangci-lint) and formatting (gofmt, goimports)
 
@@ -71,12 +71,12 @@ description: "Task list template for feature implementation"
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
 - [ ] T011 Create initial GORM models for core tables
-- [ ] T012 Create initial database migrations using GORM AutoMigrate or migration tool
-- [ ] T013 [P] Setup HTTP router using standard net/http (http.ServeMux or custom routing)
+- [ ] T012 Create initial database migrations using GORM AutoMigrate
+- [ ] T013 [P] Setup HTTP router using standard net/http with http.ServeMux
 - [ ] T014 [P] Implement OpenTracing middleware to instrument all HTTP endpoints
 - [ ] T015 [P] Implement middleware: logging, recovery, CORS
 - [ ] T016 [P] Create GORM database connection pool and health check
-- [ ] T017 [P] Setup Docker test database helper (start container, create/teardown, or transaction rollback)
+- [ ] T017 [P] Setup testcontainers test database helper (automatic container lifecycle, transaction rollback for test isolation)
 - [ ] T018 Implement base error response types and JSON marshaling
 - [ ] T019 [P] Create fixture helper utilities for test database population using GORM
 - [ ] T020 [P] Verify OpenTracing spans are created for test requests
@@ -100,10 +100,10 @@ description: "Task list template for feature implementation"
   - Happy path test cases
   - Edge cases: input validation, boundary conditions, auth errors
   - Edge cases: data state (404, conflicts), database errors, HTTP specifics
-  - Use httptest.ResponseRecorder and real Docker PostgreSQL database fixtures
+  - Use httptest.ResponseRecorder and real testcontainers PostgreSQL database fixtures
   - Use GORM for fixture data setup
   - Use protobuf structs (NOT maps) for request/response
-  - Verify OpenTracing spans are created (use mock tracer or NoopTracer)
+  - Verify OpenTracing spans are created (NoopTracer default, mock tracer for span verification tests)
   - Table-driven test structure with test case structs
 
 ### Implementation for User Story 1
@@ -113,7 +113,7 @@ description: "Task list template for feature implementation"
 - [ ] T024 [US1] Implement GORM database repository in [package]/[repository].go (depends on T022, T023)
 - [ ] T025 [US1] Implement ServeHTTP handler using net/http in [package]/[handler].go
 - [ ] T026 [US1] Add OpenTracing span creation in handler (extract/start span, set tags)
-- [ ] T027 [US1] Add child spans for database operations using GORM callbacks or manual spans
+- [ ] T027 [US1] Add child spans for database operations (instrument GORM queries)
 - [ ] T028 [US1] Add request validation and error responses with span error tagging
 - [ ] T029 [US1] Add logging and error handling
 - [ ] T030 [US1] Create fixture helpers using GORM in [package]/fixtures_test.go

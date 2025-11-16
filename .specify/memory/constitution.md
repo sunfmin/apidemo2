@@ -1,35 +1,40 @@
 <!--
 Sync Impact Report:
-- Version: 1.1.1 → 1.2.0 (MINOR bump - new principle added + technology stack restrictions)
-- Project name: apidemo1 → apidemo2
-- Modified principles:
-  - None renamed
-- Added principles:
-  - VII. Distributed Tracing (OpenTracing) - NEW observability requirement
+- Version: 1.2.1 → 1.3.0 (MINOR bump - new mandatory testing tool: testcontainers-go)
+- Modified principles: None
 - Technology Stack changes:
-  - Database Access: Now MANDATES GORM (previously allowed database/sql+pgx, sqlx, GORM, or sqlc)
-  - HTTP Framework: Now MANDATES standard net/http (previously allowed Chi, Echo, Gin, or net/http)
-  - Test Database: Now MANDATES Docker PostgreSQL container (previously allowed Docker or dedicated instance)
-- Removed principles: None
+  - Test Database: NOW requires testcontainers-go library (removed manual Docker container management)
+  - Simplified test setup with automatic container lifecycle management
+  - Container cleanup now automatic (no manual container name tracking needed)
+- Added requirements:
+  - Test suite MUST use testcontainers-go for PostgreSQL container management
+  - Tests MUST use testcontainers PostgresContainer for automatic lifecycle
+  - Container startup/teardown is handled by testcontainers (automatic cleanup)
+- Removed requirements:
+  - No longer need manual container naming with timestamps
+  - No longer need manual docker run commands
+  - No longer need manual container cleanup
 - Templates requiring updates:
-  ✅ .specify/templates/tasks-template.md (Add OpenTracing setup, GORM setup, Docker test DB tasks)
-  ✅ .specify/templates/plan-template.md (Update Technical Context to reflect GORM, net/http, Docker)
-  ✅ .specify/templates/spec-template.md (Add tracing validation to edge cases)
+  ✅ .specify/templates/tasks-template.md (Update setup tasks to use testcontainers)
+  ⚠ Test examples need testcontainers-go imports and setup
 - Rationale:
-  - OpenTracing provides distributed tracing for debugging and monitoring API calls across services
-  - GORM simplifies database operations while maintaining type safety and migration support
-  - Standard net/http reduces external dependencies and leverages Go's robust standard library
-  - Docker containers ensure consistent, isolated test environments across all development machines and CI/CD
+  - testcontainers-go provides automatic container lifecycle management
+  - Eliminates manual Docker container management and cleanup issues
+  - Industry standard for integration testing with containers
+  - Automatic port allocation prevents conflicts
+  - Automatic cleanup prevents orphaned containers
+  - Better support in CI/CD environments
+  - Simplified test setup code with less boilerplate
 - Impact:
-  - All new API endpoints MUST instrument OpenTracing spans
-  - All database access MUST use GORM
-  - All HTTP routing MUST use standard net/http (no external routers)
-  - All test suites MUST use Docker PostgreSQL containers
+  - All test setup code must use testcontainers-go library
+  - No more manual docker run commands or container name tracking
+  - Cleaner test code with automatic resource cleanup
+  - Better isolation between test runs
 - Dependencies:
-  - Requires github.com/opentracing/opentracing-go
-  - Requires gorm.io/gorm and gorm.io/driver/postgres
-  - Docker Engine or Docker Desktop for test database
+  - Requires github.com/testcontainers/testcontainers-go
+  - Requires github.com/testcontainers/testcontainers-go/modules/postgres
 -->
+
 
 # apidemo2 Constitution
 
@@ -42,7 +47,7 @@ All tests MUST be integration tests that interact with real dependencies:
 - NO mocking of database calls, HTTP clients, or external services
 - Tests MUST prepare fixture data directly in the database
 - Test database MUST be isolated per test run
-- Each test MUST clean up its own data or use transactions that rollback
+- Each test MUST use transactions with rollback for isolation (no manual cleanup)
 
 **Rationale**: Integration tests catch real-world issues that unit tests with mocks cannot, including database constraint violations, connection pooling issues, transaction handling bugs, and serialization problems.
 
@@ -73,7 +78,7 @@ Every API endpoint MUST test comprehensive edge cases:
 ### IV. Real Database Fixtures
 
 Test data MUST be prepared using real database operations:
-- Fixture data MUST be inserted using SQL or ORM calls to real test database
+- Fixture data MUST be inserted using GORM to real test database
 - NO in-memory mocks or fake repositories
 - Fixtures MUST represent realistic production data scenarios
 - Complex fixtures (with foreign keys, relationships) MUST be created with helper functions
@@ -217,15 +222,15 @@ func ProductCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 - **Language**: Go 1.21+ (recommend latest stable)
 - **Database**: PostgreSQL 15+ (with JSONB support)
-- **HTTP Framework**: Standard library `net/http` (using `http.ServeMux` or custom routing)
+- **HTTP Framework**: Standard library `net/http` using `http.ServeMux`
 - **Database Access**: GORM (gorm.io/gorm with gorm.io/driver/postgres)
 - **Distributed Tracing**: OpenTracing (github.com/opentracing/opentracing-go)
 - **Protocol Buffers**: protoc compiler, protoc-gen-go, protoc-gen-go-grpc
 - **Validation**: protoc-gen-validate for protobuf field validation
 - **Testing**: Standard library `testing` package with `httptest`
 - **Test Comparison**: google/go-cmp with protocmp for protobuf message assertions
-- **Test Database**: Docker PostgreSQL container (official postgres:15+ image)
-- **Migration Tool**: golang-migrate, goose, or GORM AutoMigrate
+- **Test Database**: testcontainers-go with PostgreSQL module (automatic Docker container management)
+- **Migration Tool**: GORM AutoMigrate (for development and testing)
 
 ## Development Workflow
 
@@ -242,47 +247,129 @@ func ProductCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 ### Protobuf Workflow
 
-1. **Define Schema**: Create or update `.proto` files in `api/` or `proto/` directory
-2. **Generate Code**: Run `make proto` or `go generate` to create Go structs
+1. **Define Schema**: Create or update `.proto` files in `api/` directory
+2. **Generate Code**: Run `go generate` to create Go structs (add `//go:generate` directives)
 3. **Use in Code**: Import generated packages, use typed structs throughout
 4. **Validate**: Use protoc-gen-validate for automatic field validation
 5. **Version**: Use protobuf field numbers consistently (never reuse deleted field numbers)
 
 ### Test Database Management
 
-- Each developer MUST have Docker Engine or Docker Desktop installed
-- Test suite MUST use Docker PostgreSQL container (official postgres:15+ image)
-- Test suite MUST start container before tests and clean up after tests
-- Container MUST use unique port or container name per test run to avoid conflicts
-- Test database schema MUST match production schema via GORM migrations or SQL migrations
-- Database connection strings MUST be configurable via environment variables
-- CI/CD MUST provision ephemeral Docker PostgreSQL containers
+- Each developer MUST have Docker Engine (Linux) or Docker Desktop (Mac/Windows) installed
+- Test suite MUST use testcontainers-go library for PostgreSQL container management
+- Test suite MUST use `testcontainers.PostgresContainer` for automatic lifecycle management
+- Container startup, port allocation, and cleanup are handled automatically by testcontainers
+- Test database schema MUST match production schema via GORM AutoMigrate
+- Tests MUST use transaction-based isolation (begin transaction, run test, rollback)
+- Container cleanup MUST use `defer container.Terminate(ctx)` pattern
+- CI/CD environments MUST have Docker daemon available for testcontainers
 
-**Example Docker Test Setup**:
+**Example Testcontainers Setup**:
 ```go
-// Start PostgreSQL container for tests
-func setupTestDB(t *testing.T) *gorm.DB {
-    // docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=test postgres:15
-    // Connect using GORM
-    dsn := "host=localhost user=postgres password=test dbname=postgres port=5433 sslmode=disable"
-    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+import (
+    "context"
+    "fmt"
+    "testing"
+    
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+    
+    "github.com/testcontainers/testcontainers-go"
+    "github.com/testcontainers/testcontainers-go/modules/postgres"
+    "github.com/testcontainers/testcontainers-go/wait"
+)
+
+// Setup PostgreSQL test container using testcontainers
+func setupTestDB(t *testing.T) (*gorm.DB, func()) {
+    ctx := context.Background()
+    
+    // Create PostgreSQL container
+    pgContainer, err := postgres.RunContainer(ctx,
+        testcontainers.WithImage("postgres:15-alpine"),
+        postgres.WithDatabase("testdb"),
+        postgres.WithUsername("postgres"),
+        postgres.WithPassword("postgres"),
+        testcontainers.WithWaitStrategy(
+            wait.ForLog("database system is ready to accept connections").
+                WithOccurrence(2),
+        ),
+    )
     if err != nil {
-        t.Fatalf("Failed to connect to test database: %v", err)
+        t.Fatalf("Failed to start PostgreSQL container: %v", err)
     }
     
-    // Run migrations
-    db.AutoMigrate(&Product{}, &Order{})
+    // Cleanup function
+    cleanup := func() {
+        if err := pgContainer.Terminate(ctx); err != nil {
+            t.Logf("Failed to terminate container: %v", err)
+        }
+    }
     
-    return db
+    // Get connection string
+    connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+    if err != nil {
+        cleanup()
+        t.Fatalf("Failed to get connection string: %v", err)
+    }
+    
+    // Connect using GORM
+    db, err := gorm.Open(postgres.Open(connStr), &gorm.Config{})
+    if err != nil {
+        cleanup()
+        t.Fatalf("Failed to connect to database: %v", err)
+    }
+    
+    // Run GORM AutoMigrate
+    if err := db.AutoMigrate(&Product{}, &Order{}); err != nil {
+        cleanup()
+        t.Fatalf("Failed to run migrations: %v", err)
+    }
+    
+    return db, cleanup
+}
+
+// Run test with transaction rollback for isolation
+func TestProductCreate(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup() // Cleanup container when test finishes
+    
+    // Begin transaction
+    tx := db.Begin()
+    defer tx.Rollback() // Always rollback at end of test
+    
+    // Run test with tx instead of db
+    product := &Product{Name: "Test Product", SKU: "TEST-001"}
+    if err := tx.Create(product).Error; err != nil {
+        t.Fatalf("Failed to create product: %v", err)
+    }
+    
+    // Assertions...
+}
+```
+
+**Parallel Test Support**:
+```go
+// For parallel tests, use t.Parallel() with testcontainers
+func TestProductCreateParallel(t *testing.T) {
+    t.Parallel() // Safe with testcontainers - each test gets own container
+    
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    
+    tx := db.Begin()
+    defer tx.Rollback()
+    
+    // Test code...
 }
 ```
 
 ### Tracing Setup
 
-- Development environment MUST configure OpenTracing global tracer (Jaeger, Zipkin, or NoopTracer)
-- Tests MUST use `opentracing.NoopTracer{}` or mock tracer to avoid external dependencies
-- Production MUST configure real tracing backend (Jaeger, Zipkin, Datadog, etc.)
-- Tracing configuration MUST be loaded from environment variables
+- Development environment MUST use `opentracing.NoopTracer{}` (no external dependencies)
+- Tests MUST use `opentracing.NoopTracer{}` by default
+- Tests that verify tracing instrumentation MAY use mock tracer to validate spans
+- Production MUST configure real tracing backend (deployment-specific: Jaeger, Zipkin, Datadog, etc.)
+- Production tracing configuration MUST be loaded from environment variables
 
 ### Code Review Requirements
 
@@ -319,4 +406,4 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.2.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.3.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16

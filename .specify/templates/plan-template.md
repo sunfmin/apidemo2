@@ -23,7 +23,7 @@
 **Database Access**: GORM (gorm.io/gorm) (MANDATORY per constitution)  
 **Distributed Tracing**: OpenTracing (github.com/opentracing/opentracing-go) (MANDATORY per constitution)  
 **Protocol Buffers**: protoc compiler, protoc-gen-go for API contracts  
-**Testing**: Standard library `testing` with `httptest`, Docker PostgreSQL container (MANDATORY per constitution)  
+**Testing**: Standard library `testing` with `httptest`, testcontainers-go for PostgreSQL (MANDATORY per constitution)  
 **Test Comparison**: google/go-cmp with protocmp for protobuf assertions  
 **Target Platform**: [e.g., Linux server, containerized deployment or NEEDS CLARIFICATION]  
 **Project Type**: [single/web/mobile - determines source structure]  
