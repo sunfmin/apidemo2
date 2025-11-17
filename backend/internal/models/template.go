@@ -29,4 +29,3 @@ type AttributeDefinition struct {
 	Options    []string               `json:"options,omitempty"` // For list type
 	Validation map[string]interface{} `json:"validation,omitempty"`
 }
-

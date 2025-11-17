@@ -79,4 +79,3 @@ func (p *ImageProcessor) ValidateImage(imagePath string) error {
 
 	return nil
 }
-

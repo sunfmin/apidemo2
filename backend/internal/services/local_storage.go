@@ -131,4 +131,3 @@ func isVideoType(contentType string) bool {
 	}
 	return false
 }
-

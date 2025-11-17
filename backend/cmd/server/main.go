@@ -61,16 +61,37 @@ func main() {
 	}
 	log.Println("✅ Database migrations complete")
 
+	// Initialize storage and processors for media
+	storagePath := os.Getenv("STORAGE_PATH")
+	if storagePath == "" {
+		storagePath = "./storage/media"
+	}
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080/media"
+	}
+
+	localStorage, err := services.NewLocalStorage(storagePath, baseURL)
+	if err != nil {
+		log.Fatalf("❌ Failed to initialize storage: %v", err)
+	}
+
+	imageProcessor := services.NewImageProcessor(300, 300) // 300x300 thumbnails
+	videoProcessor := services.NewVideoProcessor()
+	log.Println("✅ Storage and processors initialized")
+
 	// Initialize services
 	templateService := services.NewTemplateService(db)
 	productService := services.NewProductService(db)
 	variantService := services.NewVariantService(db)
+	mediaService := services.NewMediaService(db, localStorage, imageProcessor, videoProcessor, storagePath)
 	log.Println("✅ Services initialized")
 
 	// Initialize handlers
 	templateHandler := handlers.NewTemplateHandler(templateService)
 	productHandler := handlers.NewProductHandler(productService)
 	variantHandler := handlers.NewVariantHandler(variantService)
+	mediaHandler := handlers.NewMediaHandler(mediaService)
 	log.Println("✅ Handlers initialized")
 
 	// Create HTTP router
@@ -209,9 +230,72 @@ func main() {
 		}
 	})
 
-	log.Println("✅ Routes registered")
+	// Media routes - Collection endpoints
+	mux.HandleFunc("/api/v1/media/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mediaHandler.Upload(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
 
-	// TODO: Register media routes
+	mux.HandleFunc("/api/v1/media/upload/bulk", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mediaHandler.UploadBulk(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/v1/media/reorder", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mediaHandler.Reorder(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	// Media routes - Query endpoint (must come before item endpoints)
+	mux.HandleFunc("/api/v1/media", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			mediaHandler.List(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	// Media routes - File serving endpoints
+	mux.HandleFunc("/api/v1/media/file/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			mediaHandler.ServeFile(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/v1/media/thumbnail/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			mediaHandler.ServeThumbnail(w, r)
+			return
+		}
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	})
+
+	// Media routes - Item endpoints (with trailing slash for ID)
+	mux.HandleFunc("/api/v1/media/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			mediaHandler.Get(w, r)
+		case http.MethodPut:
+			mediaHandler.Update(w, r)
+		case http.MethodDelete:
+			mediaHandler.Delete(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	log.Println("✅ Routes registered")
 
 	// Apply middleware chain
 	handler := middleware.Recovery(
@@ -239,4 +323,3 @@ func checkFFmpeg() error {
 	log.Println("✅ ffmpeg found")
 	return nil
 }
-

@@ -156,4 +156,3 @@ func CreateVariantFixture(db *gorm.DB, productID string, name string, sku string
 
 	return variant
 }
-

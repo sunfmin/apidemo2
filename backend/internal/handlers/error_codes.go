@@ -13,12 +13,12 @@ type ErrorCode struct {
 // Use these instead of hardcoded error strings throughout the codebase
 var Errors = struct {
 	// Validation errors (400)
-	InvalidRequest     ErrorCode
-	ValidationFailed   ErrorCode
-	MissingRequired    ErrorCode
-	InvalidFormat      ErrorCode
-	InvalidType        ErrorCode
-	ValueOutOfRange    ErrorCode
+	InvalidRequest   ErrorCode
+	ValidationFailed ErrorCode
+	MissingRequired  ErrorCode
+	InvalidFormat    ErrorCode
+	InvalidType      ErrorCode
+	ValueOutOfRange  ErrorCode
 
 	// Not found errors (404)
 	NotFound         ErrorCode
@@ -28,10 +28,10 @@ var Errors = struct {
 	MediaNotFound    ErrorCode
 
 	// Conflict errors (409)
-	Conflict       ErrorCode
-	DuplicateSKU   ErrorCode
-	DuplicateName  ErrorCode
-	AlreadyExists  ErrorCode
+	Conflict      ErrorCode
+	DuplicateSKU  ErrorCode
+	DuplicateName ErrorCode
+	AlreadyExists ErrorCode
 
 	// Internal errors (500)
 	InternalError ErrorCode
@@ -74,4 +74,3 @@ func RespondWithError(w http.ResponseWriter, errCode ErrorCode) {
 func RespondWithErrorMessage(w http.ResponseWriter, errCode ErrorCode, customMessage string) {
 	ErrorResponse(w, errCode.Code, customMessage, errCode.HTTPStatus)
 }
-

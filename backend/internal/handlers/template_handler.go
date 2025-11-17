@@ -49,10 +49,10 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 			RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
 			return
 		}
-		if strings.Contains(err.Error(), "required") || 
-		   strings.Contains(err.Error(), "invalid") || 
-		   strings.Contains(err.Error(), "must") || 
-		   strings.Contains(err.Error(), "duplicate") {
+		if strings.Contains(err.Error(), "required") ||
+			strings.Contains(err.Error(), "invalid") ||
+			strings.Contains(err.Error(), "must") ||
+			strings.Contains(err.Error(), "duplicate") {
 			RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
 			return
 		}
@@ -108,7 +108,7 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	// Parse query parameters
 	query := r.URL.Query()
-	
+
 	// Build request
 	req := &pb.ListTemplatesRequest{
 		Pagination: &pb.PaginationRequest{},
@@ -188,10 +188,10 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 			RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
 			return
 		}
-		if strings.Contains(err.Error(), "required") || 
-		   strings.Contains(err.Error(), "invalid") || 
-		   strings.Contains(err.Error(), "must") || 
-		   strings.Contains(err.Error(), "duplicate") {
+		if strings.Contains(err.Error(), "required") ||
+			strings.Contains(err.Error(), "invalid") ||
+			strings.Contains(err.Error(), "must") ||
+			strings.Contains(err.Error(), "duplicate") {
 			RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
 			return
 		}
@@ -245,4 +245,3 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	JSONResponse(w, response, http.StatusOK)
 }
-

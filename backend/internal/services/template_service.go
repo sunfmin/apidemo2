@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gorm.io/gorm"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 
 	pb "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1"
 	"github.com/sunfmin/apidemo2/backend/internal/models"
@@ -324,4 +324,3 @@ func (s *templateService) stringToAttributeType(typeStr string) pb.AttributeType
 		return pb.AttributeType_ATTRIBUTE_TYPE_UNSPECIFIED
 	}
 }
-

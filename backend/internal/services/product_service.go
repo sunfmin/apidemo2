@@ -648,7 +648,7 @@ func (s *productService) modelToProto(model *models.Product, templateName string
 		Status:           s.stringToProtoStatus(model.Status),
 		CreatedAt:        timestamppb.New(model.CreatedAt),
 		UpdatedAt:        timestamppb.New(model.UpdatedAt),
-		VariantCount:     0, // TODO: Count variants
+		VariantCount:     0,          // TODO: Count variants
 		PrimaryImageUrls: []string{}, // TODO: Get primary images
 		ListPrice:        listPrice,
 		SalePrice:        salePrice,
@@ -712,4 +712,3 @@ func (s *productService) stringToAttributeType(typeStr string) pb.AttributeType 
 		return pb.AttributeType_ATTRIBUTE_TYPE_UNSPECIFIED
 	}
 }
-

@@ -238,4 +238,3 @@ func (h *VariantHandler) BulkCreate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(response)
 }
-

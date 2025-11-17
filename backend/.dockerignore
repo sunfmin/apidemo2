@@ -1,0 +1,38 @@
+# Test files
+tests/
+*_test.go
+*.test
+
+# Build artifacts
+server
+*.exe
+*.out
+
+# Storage (will be mounted as volume)
+storage/
+
+# Development files
+.env
+.env.*
+config.local.yaml
+config.*.local.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+README.md
+*.md
+
+# Git
+.git/
+.gitignore
+
+# Coverage
+*.coverprofile
+coverage.out
+coverage.html
+

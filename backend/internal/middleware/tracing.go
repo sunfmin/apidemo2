@@ -63,4 +63,3 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 	// WriteHeader is called by Write if not already called
 	return r.ResponseWriter.Write(b)
 }
-

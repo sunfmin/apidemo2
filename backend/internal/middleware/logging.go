@@ -29,4 +29,3 @@ func Logging(next http.Handler) http.Handler {
 		)
 	})
 }
-

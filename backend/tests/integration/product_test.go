@@ -60,9 +60,9 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "empty_product_name",
 			request: &pb.CreateProductRequest{
-				TemplateId:   "", // Will be set in test loop
-				Name:         "",
-				Sku:          "TEST-001",
+				TemplateId:       "", // Will be set in test loop
+				Name:             "",
+				Sku:              "TEST-001",
 				InitialListPrice: 99.99,
 				InitialStock:     50,
 				AttributeValues: map[string]*pb.AttributeValue{
@@ -76,9 +76,9 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "duplicate_sku",
 			request: &pb.CreateProductRequest{
-				TemplateId:   "", // Will be set in test loop
-				Name:         "Duplicate Product",
-				Sku:          "DUPLICATE-SKU",
+				TemplateId:       "", // Will be set in test loop
+				Name:             "Duplicate Product",
+				Sku:              "DUPLICATE-SKU",
 				InitialListPrice: 99.99,
 				InitialStock:     50,
 				AttributeValues: map[string]*pb.AttributeValue{
@@ -92,9 +92,9 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "invalid_template_reference",
 			request: &pb.CreateProductRequest{
-				TemplateId: "550e8400-e29b-41d4-a716-446655440000",
-				Name:       "Test Product",
-				Sku:        "TEST-002",
+				TemplateId:      "550e8400-e29b-41d4-a716-446655440000",
+				Name:            "Test Product",
+				Sku:             "TEST-002",
 				AttributeValues: map[string]*pb.AttributeValue{},
 			},
 			expectedStatus: http.StatusNotFound,
@@ -103,11 +103,11 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "missing_required_attributes",
 			request: &pb.CreateProductRequest{
-				TemplateId:   "", // Will be set in test loop
-				Name:         "Incomplete Product",
-				Sku:          "TEST-003",
+				TemplateId:       "", // Will be set in test loop
+				Name:             "Incomplete Product",
+				Sku:              "TEST-003",
 				InitialListPrice: 99.99,
-				InitialStock: 10,
+				InitialStock:     10,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
 					// Missing "Color" (required from template)
@@ -119,11 +119,11 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "list_value_not_in_options",
 			request: &pb.CreateProductRequest{
-				TemplateId:   "", // Will be set in test loop
-				Name:         "Invalid Color Product",
-				Sku:          "TEST-004",
+				TemplateId:       "", // Will be set in test loop
+				Name:             "Invalid Color Product",
+				Sku:              "TEST-004",
 				InitialListPrice: 99.99,
-				InitialStock: 25,
+				InitialStock:     25,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Red"}}, // Red not in options
@@ -135,11 +135,11 @@ func TestProductHandler_Create(t *testing.T) {
 		{
 			name: "sku_too_long",
 			request: &pb.CreateProductRequest{
-				TemplateId:   "", // Will be set in test loop
-				Name:         "Test Product",
-				Sku:          "THIS-IS-A-VERY-LONG-SKU-THAT-EXCEEDS-THE-MAXIMUM-LENGTH-OF-100-CHARACTERS-AND-SHOULD-BE-REJECTED-BY-VALIDATION",
+				TemplateId:       "", // Will be set in test loop
+				Name:             "Test Product",
+				Sku:              "THIS-IS-A-VERY-LONG-SKU-THAT-EXCEEDS-THE-MAXIMUM-LENGTH-OF-100-CHARACTERS-AND-SHOULD-BE-REJECTED-BY-VALIDATION",
 				InitialListPrice: 99.99,
-				InitialStock: 10,
+				InitialStock:     10,
 				AttributeValues: map[string]*pb.AttributeValue{
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
@@ -225,24 +225,24 @@ func TestProductHandler_Create(t *testing.T) {
 				// Build expected response from REQUEST data (not response)
 				expectedResponse := &pb.CreateProductResponse{
 					Product: &pb.Product{
-						Id:              response.Product.Id,         // Generated (OK to copy)
-						TemplateId:      tc.request.TemplateId,
-						TemplateName:    "Electronics",               // From template fixture
-						Name:            tc.request.Name,
-						Sku:             tc.request.Sku,
-						Description:     tc.request.Description,
-						ListPrice:       tc.request.InitialListPrice,
-						SalePrice:       tc.request.InitialSalePrice,
-						EffectivePrice:  tc.request.InitialListPrice, // No sale price set
-						Currency:        "USD",
-						TotalStock:      tc.request.InitialStock,
-						AvailableStock:  tc.request.InitialStock, // Initially no reserved stock
-						ReservedStock:   0,
-						AttributeValues: expectedAttributeValues,     // From request
-						Status:          tc.request.Status,
-						CreatedAt:       response.Product.CreatedAt,  // Generated (OK to copy)
-						UpdatedAt:       response.Product.UpdatedAt,  // Generated (OK to copy)
-						VariantCount:    0,
+						Id:               response.Product.Id, // Generated (OK to copy)
+						TemplateId:       tc.request.TemplateId,
+						TemplateName:     "Electronics", // From template fixture
+						Name:             tc.request.Name,
+						Sku:              tc.request.Sku,
+						Description:      tc.request.Description,
+						ListPrice:        tc.request.InitialListPrice,
+						SalePrice:        tc.request.InitialSalePrice,
+						EffectivePrice:   tc.request.InitialListPrice, // No sale price set
+						Currency:         "USD",
+						TotalStock:       tc.request.InitialStock,
+						AvailableStock:   tc.request.InitialStock, // Initially no reserved stock
+						ReservedStock:    0,
+						AttributeValues:  expectedAttributeValues, // From request
+						Status:           tc.request.Status,
+						CreatedAt:        response.Product.CreatedAt, // Generated (OK to copy)
+						UpdatedAt:        response.Product.UpdatedAt, // Generated (OK to copy)
+						VariantCount:     0,
 						PrimaryImageUrls: []string{},
 					},
 				}
@@ -375,24 +375,24 @@ func TestProductHandler_Get(t *testing.T) {
 				// Build expected response from FIXTURE data (not response)
 				expectedResponse := &pb.GetProductResponse{
 					Product: &pb.Product{
-						Id:              response.Product.Id,         // Generated (OK to copy)
-						TemplateId:      template.ID,
-						TemplateName:    template.Name,
-						Name:            product.Name,
-						Sku:             product.SKU,
-						Description:     product.Description,
-						ListPrice:       pricing.ListPrice,
-						SalePrice:       pricing.SalePrice,
-						EffectivePrice:  pricing.SalePrice, // Sale price is set
-						Currency:        pricing.Currency,
-						TotalStock:      inventory.OnHandQuantity,
-						AvailableStock:  inventory.OnHandQuantity,
-						ReservedStock:   0,
-						AttributeValues: expectedAttrs,               // From fixture (not response)
-						Status:          pb.ProductStatus_PRODUCT_STATUS_ACTIVE, // Default from fixture
-						CreatedAt:       response.Product.CreatedAt,  // Generated (OK to copy)
-						UpdatedAt:       response.Product.UpdatedAt,  // Generated (OK to copy)
-						VariantCount:    0,
+						Id:               response.Product.Id, // Generated (OK to copy)
+						TemplateId:       template.ID,
+						TemplateName:     template.Name,
+						Name:             product.Name,
+						Sku:              product.SKU,
+						Description:      product.Description,
+						ListPrice:        pricing.ListPrice,
+						SalePrice:        pricing.SalePrice,
+						EffectivePrice:   pricing.SalePrice, // Sale price is set
+						Currency:         pricing.Currency,
+						TotalStock:       inventory.OnHandQuantity,
+						AvailableStock:   inventory.OnHandQuantity,
+						ReservedStock:    0,
+						AttributeValues:  expectedAttrs,                          // From fixture (not response)
+						Status:           pb.ProductStatus_PRODUCT_STATUS_ACTIVE, // Default from fixture
+						CreatedAt:        response.Product.CreatedAt,             // Generated (OK to copy)
+						UpdatedAt:        response.Product.UpdatedAt,             // Generated (OK to copy)
+						VariantCount:     0,
 						PrimaryImageUrls: []string{},
 					},
 				}
@@ -427,7 +427,7 @@ func TestProductHandler_List(t *testing.T) {
 	// Create multiple product fixtures
 	for i := 1; i <= 5; i++ {
 		product := testutil.CreateProductFixture(db, template.ID, fmt.Sprintf("Product %d", i), fmt.Sprintf("SKU-%03d", i), `{"Brand":{"type":"ATTRIBUTE_TYPE_TEXT","value":"TestBrand"}}`)
-		
+
 		// Create pricing
 		db.Create(&models.ProductPricing{
 			ProductID: product.ID,
@@ -435,7 +435,7 @@ func TestProductHandler_List(t *testing.T) {
 			Currency:  "USD",
 			ValidFrom: time.Now(),
 		})
-		
+
 		// Create inventory
 		db.Create(&models.ProductInventory{
 			ProductID:      product.ID,
@@ -823,7 +823,7 @@ func TestProductHandler_BulkUpdateStatus(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		product := testutil.CreateProductFixture(db, template.ID, fmt.Sprintf("Bulk Product %d", i), fmt.Sprintf("BULK-%03d", i), `{"Brand":{"type":"ATTRIBUTE_TYPE_TEXT","value":"Test"}}`)
 		productIDs[i] = product.ID
-		
+
 		db.Create(&models.ProductPricing{
 			ProductID: product.ID,
 			ListPrice: 100.00,
@@ -915,4 +915,3 @@ func TestProductHandler_BulkUpdateStatus(t *testing.T) {
 
 	t.Log("✅ All test cases passed")
 }
-

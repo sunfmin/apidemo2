@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: pim-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pim_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pim-api
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: "host=postgres user=postgres password=postgres dbname=pim_dev port=5432 sslmode=disable"
+      STORAGE_PATH: "/app/storage/media"
+      BASE_URL: "http://localhost:8080/media"
+    volumes:
+      - media_storage:/app/storage/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_storage:
+

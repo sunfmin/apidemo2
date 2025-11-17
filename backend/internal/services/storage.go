@@ -19,4 +19,3 @@ type MediaStorage interface {
 	// URL returns a publicly accessible URL for the file
 	URL(ctx context.Context, path string) (string, error)
 }
-

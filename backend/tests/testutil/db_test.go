@@ -118,4 +118,3 @@ func TestTruncateTablesWithForeignKeys(t *testing.T) {
 
 	t.Log("✅ CASCADE truncation working correctly")
 }
-

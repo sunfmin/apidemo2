@@ -28,12 +28,12 @@ func (p *VideoProcessor) ExtractPreviewFrame(videoPath, outputPath string, times
 	// Run ffmpeg to extract frame
 	cmd := exec.Command(
 		"ffmpeg",
-		"-i", videoPath,           // Input video
-		"-ss", timestamp,          // Seek to timestamp (e.g., "00:00:01")
-		"-vframes", "1",           // Extract 1 frame
-		"-q:v", "2",               // Quality (2 = high quality)
-		"-y",                      // Overwrite output file if exists
-		outputPath,                // Output image path
+		"-i", videoPath, // Input video
+		"-ss", timestamp, // Seek to timestamp (e.g., "00:00:01")
+		"-vframes", "1", // Extract 1 frame
+		"-q:v", "2", // Quality (2 = high quality)
+		"-y",       // Overwrite output file if exists
+		outputPath, // Output image path
 	)
 
 	output, err := cmd.CombinedOutput()
@@ -124,4 +124,3 @@ func (p *VideoProcessor) ValidateVideo(videoPath string) error {
 
 	return nil
 }
-

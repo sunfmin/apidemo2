@@ -40,4 +40,3 @@ func JSONResponse(w http.ResponseWriter, data interface{}, status int) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
 }
-

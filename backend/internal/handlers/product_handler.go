@@ -301,4 +301,3 @@ func HandleServiceError(w http.ResponseWriter, err error) {
 		RespondWithErrorMessage(w, Errors.InternalError, errMsg)
 	}
 }
-

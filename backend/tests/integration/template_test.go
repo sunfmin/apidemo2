@@ -177,11 +177,11 @@ func TestTemplateHandler_Create(t *testing.T) {
 				// Build expected response with generated fields from actual response
 				expectedResponse := &pb.CreateTemplateResponse{
 					Template: &pb.ProductTemplate{
-						Id:        response.Template.Id,        // Use actual generated ID
-						Name:      tc.request.Name,
+						Id:         response.Template.Id, // Use actual generated ID
+						Name:       tc.request.Name,
 						Attributes: tc.request.Attributes,
-						CreatedAt: response.Template.CreatedAt, // Use actual timestamp
-						UpdatedAt: response.Template.UpdatedAt, // Use actual timestamp
+						CreatedAt:  response.Template.CreatedAt, // Use actual timestamp
+						UpdatedAt:  response.Template.UpdatedAt, // Use actual timestamp
 					},
 				}
 
@@ -308,9 +308,9 @@ func TestTemplateHandler_Get(t *testing.T) {
 					Template: &pb.ProductTemplate{
 						Id:         tc.templateID,
 						Name:       fixture.Name,
-						Attributes: expectedAttrs,                    // From fixture (not response)
-						CreatedAt:  response.Template.CreatedAt,      // Generated (OK to copy)
-						UpdatedAt:  response.Template.UpdatedAt,      // Generated (OK to copy)
+						Attributes: expectedAttrs,               // From fixture (not response)
+						CreatedAt:  response.Template.CreatedAt, // Generated (OK to copy)
+						UpdatedAt:  response.Template.UpdatedAt, // Generated (OK to copy)
 					},
 				}
 
@@ -502,9 +502,9 @@ func TestTemplateHandler_Update(t *testing.T) {
 					Template: &pb.ProductTemplate{
 						Id:         tc.templateID,
 						Name:       tc.request.Name,
-						Attributes: expectedAttrs,                    // From request/fixture (not response)
-						CreatedAt:  response.Template.CreatedAt,      // Generated (OK to copy)
-						UpdatedAt:  response.Template.UpdatedAt,      // Generated (OK to copy)
+						Attributes: expectedAttrs,               // From request/fixture (not response)
+						CreatedAt:  response.Template.CreatedAt, // Generated (OK to copy)
+						UpdatedAt:  response.Template.UpdatedAt, // Generated (OK to copy)
 					},
 				}
 

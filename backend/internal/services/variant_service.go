@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 
 	pb "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1"
 	"github.com/sunfmin/apidemo2/backend/internal/models"
@@ -526,12 +526,12 @@ func (s *variantService) modelToProto(model *models.ProductVariant, product *mod
 
 	// Merge product attributes with variant overrides for effective attributes
 	pbEffective := make(map[string]*pb.AttributeValue)
-	
+
 	// Start with product attributes
 	for name, value := range productAttrs {
 		pbEffective[name] = s.attributeValueToProto(value)
 	}
-	
+
 	// Override with variant-specific attributes
 	for name, value := range variantAttrs {
 		pbEffective[name] = s.attributeValueToProto(value)
@@ -562,8 +562,8 @@ func (s *variantService) modelToProto(model *models.ProductVariant, product *mod
 		ProductName:              product.Name,
 		Name:                     model.Name,
 		Sku:                      model.SKU,
-		AttributeValues:          pbOverrides,          // Only overrides
-		EffectiveAttributeValues: pbEffective,         // Merged parent + overrides
+		AttributeValues:          pbOverrides, // Only overrides
+		EffectiveAttributeValues: pbEffective, // Merged parent + overrides
 		Price:                    price,
 		StockQuantity:            stockQuantity,
 		AvailableQuantity:        availableQuantity,
@@ -655,4 +655,3 @@ func (s *variantService) stringToAttributeType(typeStr string) pb.AttributeType 
 		return pb.AttributeType_ATTRIBUTE_TYPE_UNSPECIFIED
 	}
 }
-

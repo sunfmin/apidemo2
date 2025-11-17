@@ -14,17 +14,17 @@ type Product struct {
 	Name            string         `gorm:"type:varchar(255);not null;index"`
 	SKU             string         `gorm:"type:varchar(100);not null;uniqueIndex"`
 	Description     string         `gorm:"type:text"`
-	AttributeValues datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`      // Template-specific flexible attributes
+	AttributeValues datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"` // Template-specific flexible attributes
 	Status          string         `gorm:"type:varchar(50);not null;default:'active';index"`
 	CreatedAt       time.Time      `gorm:"not null"`
 	UpdatedAt       time.Time      `gorm:"not null"`
 
 	// Relations
-	Template    ProductTemplate     `gorm:"foreignKey:TemplateID"`
-	Pricing     *ProductPricing     `gorm:"foreignKey:ProductID"`
-	Inventories []ProductInventory  `gorm:"foreignKey:ProductID"` // Multiple locations
-	Variants    []ProductVariant    `gorm:"foreignKey:ProductID"`
-	MediaFiles  []MediaFile         `gorm:"polymorphic:Entity;"`
+	Template    ProductTemplate    `gorm:"foreignKey:TemplateID"`
+	Pricing     *ProductPricing    `gorm:"foreignKey:ProductID"`
+	Inventories []ProductInventory `gorm:"foreignKey:ProductID"` // Multiple locations
+	Variants    []ProductVariant   `gorm:"foreignKey:ProductID"`
+	MediaFiles  []MediaFile        `gorm:"polymorphic:Entity;"`
 }
 
 // TableName specifies the table name for Product
@@ -39,7 +39,7 @@ type ProductPricing struct {
 	ProductID string    `gorm:"type:uuid;not null;uniqueIndex"` // One pricing record per product
 	ListPrice float64   `gorm:"type:decimal(10,2);not null;index"`
 	SalePrice float64   `gorm:"type:decimal(10,2);not null;default:0;index"` // 0 if not on sale
-	Cost      float64   `gorm:"type:decimal(10,2);not null;default:0"`      // Wholesale cost
+	Cost      float64   `gorm:"type:decimal(10,2);not null;default:0"`       // Wholesale cost
 	Currency  string    `gorm:"type:varchar(3);not null;default:'USD'"`
 	ValidFrom time.Time `gorm:"not null"`
 	ValidTo   *time.Time
@@ -54,14 +54,14 @@ func (ProductPricing) TableName() string {
 // ProductInventory represents stock information for a product
 // Owned by Warehouse/Operations team, updated constantly (real-time)
 type ProductInventory struct {
-	ID              string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	ProductID       string     `gorm:"type:uuid;not null;index:idx_product_location"`
-	LocationID      string     `gorm:"type:varchar(50);not null;default:'default';index:idx_product_location"`
-	OnHandQuantity  int32      `gorm:"type:integer;not null;default:0;index"`
-	ReservedQuantity int32     `gorm:"type:integer;not null;default:0"`
-	OnOrderQuantity int32      `gorm:"type:integer;not null;default:0"`
-	LastCountedAt   *time.Time
-	UpdatedAt       time.Time  `gorm:"not null"`
+	ID               string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ProductID        string `gorm:"type:uuid;not null;index:idx_product_location"`
+	LocationID       string `gorm:"type:varchar(50);not null;default:'default';index:idx_product_location"`
+	OnHandQuantity   int32  `gorm:"type:integer;not null;default:0;index"`
+	ReservedQuantity int32  `gorm:"type:integer;not null;default:0"`
+	OnOrderQuantity  int32  `gorm:"type:integer;not null;default:0"`
+	LastCountedAt    *time.Time
+	UpdatedAt        time.Time `gorm:"not null"`
 }
 
 // TableName specifies the table name for ProductInventory
@@ -75,13 +75,13 @@ type ProductVariant struct {
 	ProductID       string         `gorm:"type:uuid;not null;index"`
 	Name            string         `gorm:"type:varchar(255);not null"`
 	SKU             string         `gorm:"type:varchar(100);not null;uniqueIndex"`
-	AttributeValues datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`      // Template-specific overrides only
+	AttributeValues datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"` // Template-specific overrides only
 	CreatedAt       time.Time      `gorm:"not null"`
 	UpdatedAt       time.Time      `gorm:"not null"`
 
 	// Relations
-	Pricing     *VariantPricing     `gorm:"foreignKey:VariantID"`
-	Inventories []VariantInventory  `gorm:"foreignKey:VariantID"` // Multiple locations
+	Pricing     *VariantPricing    `gorm:"foreignKey:VariantID"`
+	Inventories []VariantInventory `gorm:"foreignKey:VariantID"` // Multiple locations
 }
 
 // VariantPricing represents pricing information for a variant
@@ -103,14 +103,14 @@ func (VariantPricing) TableName() string {
 
 // VariantInventory represents stock information for a variant
 type VariantInventory struct {
-	ID               string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	VariantID        string     `gorm:"type:uuid;not null;index:idx_variant_location"`
-	LocationID       string     `gorm:"type:varchar(50);not null;default:'default';index:idx_variant_location"`
-	OnHandQuantity   int32      `gorm:"type:integer;not null;default:0;index"`
-	ReservedQuantity int32      `gorm:"type:integer;not null;default:0"`
-	OnOrderQuantity  int32      `gorm:"type:integer;not null;default:0"`
+	ID               string `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	VariantID        string `gorm:"type:uuid;not null;index:idx_variant_location"`
+	LocationID       string `gorm:"type:varchar(50);not null;default:'default';index:idx_variant_location"`
+	OnHandQuantity   int32  `gorm:"type:integer;not null;default:0;index"`
+	ReservedQuantity int32  `gorm:"type:integer;not null;default:0"`
+	OnOrderQuantity  int32  `gorm:"type:integer;not null;default:0"`
 	LastCountedAt    *time.Time
-	UpdatedAt        time.Time  `gorm:"not null"`
+	UpdatedAt        time.Time `gorm:"not null"`
 }
 
 // TableName specifies the table name for VariantInventory
@@ -153,4 +153,3 @@ type AttributeValue struct {
 	Type  string      `json:"type"`  // text, number, boolean, date, list, map, image, video
 	Value interface{} `json:"value"` // Actual value - type depends on Type field
 }
-

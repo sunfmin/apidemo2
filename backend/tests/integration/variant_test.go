@@ -256,18 +256,18 @@ func TestVariantHandler_Create(t *testing.T) {
 				// Build expected response from REQUEST data
 				expectedResponse := &pb.CreateVariantResponse{
 					Variant: &pb.ProductVariant{
-						Id:                       response.Variant.Id,              // Generated (OK to copy)
+						Id:                       response.Variant.Id, // Generated (OK to copy)
 						ProductId:                tc.request.ProductId,
-						ProductName:              product.Name,                     // From parent product
+						ProductName:              product.Name, // From parent product
 						Name:                     tc.request.Name,
 						Sku:                      tc.request.Sku,
-						AttributeValues:          expectedAttributeValues,          // Overrides only
+						AttributeValues:          expectedAttributeValues,                   // Overrides only
 						EffectiveAttributeValues: response.Variant.EffectiveAttributeValues, // Calculated by service
 						Price:                    tc.request.InitialPrice,
 						StockQuantity:            tc.request.InitialStock,
 						AvailableQuantity:        tc.request.InitialStock,
-						CreatedAt:                response.Variant.CreatedAt,       // Generated (OK to copy)
-						UpdatedAt:                response.Variant.UpdatedAt,       // Generated (OK to copy)
+						CreatedAt:                response.Variant.CreatedAt, // Generated (OK to copy)
+						UpdatedAt:                response.Variant.UpdatedAt, // Generated (OK to copy)
 						PrimaryImageUrls:         []string{},
 					},
 				}
@@ -745,9 +745,9 @@ func TestVariantHandler_BulkCreate(t *testing.T) {
 
 	// Table-driven test cases
 	testCases := []struct {
-		name                string
-		request             *pb.BulkCreateVariantsRequest
-		expectedStatus      int
+		name                 string
+		request              *pb.BulkCreateVariantsRequest
+		expectedStatus       int
 		expectedVariantCount int
 		expectedErrorCount   int
 	}{
@@ -827,8 +827,8 @@ func TestVariantHandler_BulkCreate(t *testing.T) {
 				ProductId: "550e8400-e29b-41d4-a716-446655440000",
 				Variants: []*pb.VariantInput{
 					{
-						Name: "T-Shirt - Test",
-						Sku:  "TEST-SKU",
+						Name:            "T-Shirt - Test",
+						Sku:             "TEST-SKU",
 						AttributeValues: map[string]*pb.AttributeValue{},
 					},
 				},
@@ -850,8 +850,8 @@ func TestVariantHandler_BulkCreate(t *testing.T) {
 						},
 					},
 					{
-						Name: "", // Invalid: empty name
-						Sku:  "INVALID-002",
+						Name:            "", // Invalid: empty name
+						Sku:             "INVALID-002",
 						AttributeValues: map[string]*pb.AttributeValue{},
 					},
 					{
@@ -862,8 +862,8 @@ func TestVariantHandler_BulkCreate(t *testing.T) {
 						},
 					},
 					{
-						Name: "Invalid SKU Format",
-						Sku:  "INVALID@SKU#004", // Invalid characters
+						Name:            "Invalid SKU Format",
+						Sku:             "INVALID@SKU#004", // Invalid characters
 						AttributeValues: map[string]*pb.AttributeValue{},
 					},
 				},
@@ -958,13 +958,13 @@ func TestVariantHandler_BulkCreate(t *testing.T) {
 					if err := db.First(&dbVariant, "id = ?", variant.Id).Error; err != nil {
 						t.Errorf("Variant %s not found in database: %v", variant.Id, err)
 					}
-					
+
 					// Verify pricing and inventory were also created
 					var pricing models.VariantPricing
 					if err := db.First(&pricing, "variant_id = ?", variant.Id).Error; err != nil {
 						t.Errorf("Variant pricing for %s not found: %v", variant.Id, err)
 					}
-					
+
 					var inventory models.VariantInventory
 					if err := db.First(&inventory, "variant_id = ?", variant.Id).Error; err != nil {
 						t.Errorf("Variant inventory for %s not found: %v", variant.Id, err)
@@ -972,25 +972,8 @@ func TestVariantHandler_BulkCreate(t *testing.T) {
 				}
 			}
 
-			// Cleanup: Truncate tables after each test case
-			testutil.TruncateTables(db, "product_templates", "products", "product_pricings", "product_inventories", "product_variants", "variant_pricings", "variant_inventories")
-
-			// Recreate template and product for next test
-			if tc.name != testCases[len(testCases)-1].name {
-				template = testutil.CreateTemplateFixture(db, "Clothing", `[
-					{"name":"Size","type":"list","required":true,"options":["S","M","L","XL"]},
-					{"name":"Color","type":"list","required":true,"options":["Red","Blue","Black","White"]}
-				]`)
-				product = testutil.CreateProductFixture(db, template.ID, "T-Shirt", "TSHIRT-BASE", `{
-					"Size":{"type":"ATTRIBUTE_TYPE_LIST","value":["M"]},
-					"Color":{"type":"ATTRIBUTE_TYPE_LIST","value":["Blue"]}
-				}`)
-				db.Create(&models.ProductPricing{ProductID: product.ID, ListPrice: 29.99, Currency: "USD", ValidFrom: time.Now()})
-				db.Create(&models.ProductInventory{ProductID: product.ID, LocationID: "default", OnHandQuantity: 100})
-			}
 		})
 	}
 
 	t.Log("✅ All test cases passed")
 }
-
