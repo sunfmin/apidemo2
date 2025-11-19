@@ -1,7 +1,8 @@
 <!--
-Version: 1.9.3
+Version: 1.9.4
 Date: 2025-11-19
-Changes: Reorganized Code Review Requirements by principle for complete coverage
+Changes: Added mandatory testing requirement for all errors (sentinel and HTTP)
+Rationale: Untested error paths are bugs waiting to happen in production
 Status: Production ready, 100% compliant, all tests passing
 -->
 
@@ -956,8 +957,14 @@ Error handling MUST use a two-layer strategy: sentinel errors for internal flow 
 **Testing**:
 - Tests MUST verify error wrapping chains using `errors.Is()` and `errors.As()`
 - Tests MUST verify HTTP handlers return correct error codes for each error type
+- **ALL defined sentinel errors MUST have corresponding test cases** (each ErrXxx must be tested)
+- **ALL HTTP error codes MUST have corresponding test cases** (each Errors.Xxx must be tested)
+- Tests MUST cover both success and error paths for every operation
+- Error test cases MUST verify the complete error flow: Service (sentinel) → Handler (HTTP code) → Client (response)
 
 **Rationale**: This two-layer approach provides type-safe error handling at both service and HTTP layers. Sentinel errors enable type-safe checking with `errors.Is()` across wrapped errors, while the HTTP singleton provides consistent client-facing error codes. Error wrapping creates an "error breadcrumb trail" for debugging without stack traces (Go standard library doesn't provide stack traces). The singleton pattern prevents hardcoded strings and provides IDE autocomplete. Together, these create a robust error handling strategy that's type-safe, debuggable, and maintains clean separation between internal and external concerns.
+
+**CRITICAL - Error Testing**: Every defined error (both sentinel errors in services and HTTP error codes in handlers) MUST have at least one test case that triggers and verifies it. Untested error paths are bugs waiting to happen in production. Tests MUST verify the complete error flow from service (sentinel error) through handler (HTTP code mapping) to client (HTTP response).
 
 **Complete Error Handling Example**:
 
@@ -1178,9 +1185,26 @@ func RespondWithError(w http.ResponseWriter, errCode ErrorCode) {
 - ✅ **Maintainable** - add new error by adding one line to Errors singleton
 - ✅ **Flexible** - ServiceErr is optional (nil for HTTP-only errors)
 
+**Error Testing Requirements**:
+```go
+// For every sentinel error in services/errors.go, there MUST be a test
+// Example: Testing ErrDuplicateSKU
+func TestProductHandler_Create_DuplicateSKU(t *testing.T) {
+    // Setup - create product with SKU
+    // Test - try to create another product with same SKU
+    // Verify:
+    // 1. Service returns error with ErrDuplicateSKU wrapped
+    // 2. Handler maps to Errors.DuplicateSKU
+    // 3. Client receives 409 with DUPLICATE_SKU code
+}
+
+// For every HTTP error code, verify it can be triggered
+// Untested errors = production bugs waiting to happen
+```
+
 **Why Two Layers (Simplified)**:
-- **Service sentinel errors**: Domain logic errors (ErrProductNotFound)
-- **HTTP error codes**: Client-facing codes with automatic mapping via ServiceErr field
+- **Service sentinel errors**: Domain logic errors (ErrProductNotFound) - ALL must be tested
+- **HTTP error codes**: Client-facing codes with automatic mapping via ServiceErr field - ALL must be tested
 - **No manual switch**: AllErrors() + ServiceErr field handles mapping
 - **Clean handlers**: Just call HandleServiceError(w, err) - done!
 
@@ -1761,6 +1785,9 @@ All pull requests MUST be reviewed against these constitutional requirements, or
 - Reviewers MUST verify HandleServiceError uses AllErrors() iteration (no switch statement)
 - Reviewers MUST verify HTTP handlers do NOT expose internal error details to clients
 - Reviewers MUST verify tests use `errors.Is()` and `errors.As()` for error validation
+- **Reviewers MUST verify ALL sentinel errors have test cases** (every ErrXxx tested)
+- **Reviewers MUST verify ALL HTTP error codes have test cases** (every Errors.Xxx tested)
+- **Reviewers MUST verify both success and error paths tested for every operation**
 
 **Principle X: Context-Aware Operations**
 - Reviewers MUST verify all service methods accept `context.Context` as first parameter
@@ -1798,4 +1825,4 @@ All pull requests MUST be reviewed against these constitutional requirements, or
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.9.3 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
+**Version**: 1.9.4 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
