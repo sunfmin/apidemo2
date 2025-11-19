@@ -1,7 +1,7 @@
 <!--
-Version: 1.9.2
+Version: 1.9.3
 Date: 2025-11-19
-Changes: Added middleware pattern for service extensibility, consolidated error handling principles
+Changes: Reorganized Code Review Requirements by principle for complete coverage
 Status: Production ready, 100% compliant, all tests passing
 -->
 
@@ -777,7 +777,7 @@ func main() {
 - **Error handling**: Wrap or transform errors
 - **Retry logic**: Retry failed operations
 - **Circuit breakers**: Fail fast when downstream is down
-```
+
 
 **HTTP Handler (Thin Wrapper)**:
 ```go
@@ -1702,34 +1702,78 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 ### Code Review Requirements
 
+All pull requests MUST be reviewed against these constitutional requirements, organized by principle:
+
+**Principle I: Integration Testing First (No Mocking)**
 - Pull requests MUST include integration tests for all new endpoints
-- Tests MUST use protobuf-generated structs (no `map[string]interface{}`)
-- Tests MUST use `cmp.Diff()` with `protocmp.Transform()` for ALL protobuf message assertions
-- Tests MUST NOT use individual field comparisons for protobuf messages
-- Tests MUST demonstrate edge case coverage
-- Reviewers MUST verify table-driven test structure
 - Reviewers MUST verify no mocking is used for database or HTTP layers
-- Reviewers MUST verify `.proto` files are updated for API changes
-- Reviewers MUST verify protobuf assertions use protocmp (not individual field checks)
-- Reviewers MUST verify OpenTracing spans are created for new endpoints
-- Reviewers MUST verify GORM is used for database access (no raw SQL unless justified)
+- Reviewers MUST verify tests use real PostgreSQL via testcontainers-go
+
+**Principle II: Table-Driven Test Design**
+- Reviewers MUST verify table-driven test structure (testCases := []struct)
+- Reviewers MUST verify test cases have descriptive name fields
+- Reviewers MUST verify shared setup/teardown extracted to helpers
+
+**Principle III: Edge Case Coverage**
+- Tests MUST demonstrate edge case coverage (validation, boundaries, errors, HTTP, security)
+- Reviewers MUST verify SQL injection and XSS tests for text inputs
+- Reviewers MUST verify negative values, zero values, and boundary conditions tested
+
+**Principle IV: Real Database Fixtures**
+- Reviewers MUST verify fixtures use GORM to insert into real database
 - Reviewers MUST verify tests use database truncation for cleanup (defer pattern)
 - Reviewers MUST verify truncation handles all tables modified by test
 - Reviewers MUST verify truncation uses CASCADE for foreign key dependencies
-- Reviewers MUST verify error codes use singleton struct instances (no hardcoded strings)
-- Reviewers MUST verify new error types are added to singleton, not inline
+
+**Principle V: ServeHTTP Endpoint Testing**
+- Reviewers MUST verify tests use httptest.NewRequest and httptest.NewRecorder
+- Reviewers MUST verify tests exercise full HTTP stack (not bypassing HTTP layer)
+
+**Principle VI: Protobuf Data Structures**
+- Tests MUST use protobuf-generated structs (no `map[string]interface{}`)
+- Tests MUST use `cmp.Diff()` with `protocmp.Transform()` for ALL protobuf message assertions
+- Tests MUST NOT use individual field comparisons for protobuf messages
+- Reviewers MUST verify `.proto` files are updated for API changes
+- Reviewers MUST verify protobuf assertions use protocmp (not == or reflect.DeepEqual)
+
+**Principle VII: Distributed Tracing**
+- Reviewers MUST verify OpenTracing spans are created for new endpoints
+- Reviewers MUST verify spans include required tags (http.method, http.url, http.status_code)
+- Reviewers MUST verify error spans are tagged with error=true
+
+**Principle VIII: Service Layer Architecture**
+- Reviewers MUST verify services are in public packages (not internal/)
+- Reviewers MUST verify services do NOT depend on HTTP types (http.Request, http.ResponseWriter)
+- Reviewers MUST verify handlers are thin wrappers delegating to services
+- Reviewers MUST verify service methods accept only business parameters
+- Reviewers MUST verify services use dependency injection (constructor parameters)
+- Reviewers MUST verify AutoMigrate() is updated when models change
+- Reviewers MUST verify services return protobuf types (not internal models)
+
+**Principle IX: Comprehensive Error Handling**
+- Reviewers MUST verify sentinel errors defined for domain-specific errors
+- Reviewers MUST verify errors are wrapped with `fmt.Errorf("%w", err)` (NOT `%v`)
+- Reviewers MUST verify error messages add contextual information at each layer
+- Reviewers MUST verify error checking uses `errors.Is()` and `errors.As()` (NOT string comparison)
+- Reviewers MUST verify errors are never swallowed without logging or returning
+- Reviewers MUST verify HTTP error codes use singleton struct instances (no hardcoded strings)
+- Reviewers MUST verify ErrorCode.ServiceErr field maps to service sentinel errors
+- Reviewers MUST verify HandleServiceError uses AllErrors() iteration (no switch statement)
+- Reviewers MUST verify HTTP handlers do NOT expose internal error details to clients
+- Reviewers MUST verify tests use `errors.Is()` and `errors.As()` for error validation
+
+**Principle X: Context-Aware Operations**
 - Reviewers MUST verify all service methods accept `context.Context` as first parameter
 - Reviewers MUST verify HTTP handlers extract context from `r.Context()`
 - Reviewers MUST verify database operations use `db.WithContext(ctx)`
 - Reviewers MUST verify external HTTP calls use `http.NewRequestWithContext(ctx, ...)`
 - Reviewers MUST verify context is propagated through all layers (HTTP → Service → Repository)
-- Reviewers MUST verify errors are wrapped with `fmt.Errorf("%w", err)` (NOT `%v`)
-- Reviewers MUST verify error messages add contextual information at each layer
-- Reviewers MUST verify error checking uses `errors.Is()` and `errors.As()` (NOT string comparison)
-- Reviewers MUST verify errors are never swallowed without logging or returning
-- Reviewers MUST verify HTTP handlers do NOT expose internal error details to clients
-- Reviewers MUST verify tests use `errors.Is()` and `errors.As()` for error validation
-- Tests MUST be reviewed before implementation code
+- Reviewers MUST verify context cancellation checks in Create/long-running operations
+- Tests MUST verify context cancellation behavior where applicable
+
+**General**
+- Tests MUST be reviewed before implementation code (TDD workflow)
+- Reviewers MUST verify GORM is used for database access (no raw SQL unless justified)
 
 ## Governance
 
@@ -1754,4 +1798,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.9.2 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
+**Version**: 1.9.3 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
