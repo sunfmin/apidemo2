@@ -1,30 +1,33 @@
 <!--
 Sync Impact Report:
-- Version: 1.9.0 → 1.9.1 (PATCH bump - clarify migration strategy for external apps)
+- Version: 1.9.1 → 1.9.2 (PATCH bump - add middleware pattern for service customization)
 - Clarifications added:
-  - Services MUST export AutoMigrate() function for external apps
-  - External apps need database migrations but can't import internal/models
-  - Solution: services.AutoMigrate(db) wraps internal model migrations
+  - Services MAY accept middleware functions in constructor for full extensibility
+  - Middleware pattern (vs simple hooks) gives external apps full control over execution
+  - Middleware can abort, transform, wrap errors, and compose cleanly
 - Changes:
-  - Added guidance on AutoMigrate() function requirement
-  - Added example services/migrations.go implementation
-  - Updated external usage examples to show AutoMigrate() call
-  - Models still stay internal (encapsulation preserved)
+  - Added middleware pattern to Principle VIII
+  - Shows how external apps can wrap service operations
+  - Middleware receives "next" function for flow control
+  - Examples: validation, audit logging, notifications, caching, rate limiting
+  - Documents middleware vs hooks comparison
 - Rationale:
-  - External apps using services need database schema
-  - Can't import internal/models to run AutoMigrate themselves
-  - Exporting AutoMigrate() from services solves this cleanly
-  - Services control their own schema requirements
-  - Models remain encapsulated (don't expose GORM internals)
+  - Middleware pattern is more powerful than simple hooks
+  - External apps can abort execution (don't call next)
+  - External apps can transform inputs/outputs
+  - Middleware can run before AND after in same function
+  - Familiar pattern (like HTTP middleware)
+  - Composable and flexible
 - Impact:
-  - Services must export AutoMigrate() function
-  - External apps call services.AutoMigrate(db) before using services
-  - No need to move models to public packages
-  - Clean separation maintained
+  - Services should define middleware function signatures where customization needed
+  - Constructor accepts variadic middleware parameters
+  - Middleware chain executes in order (first middleware runs first)
+  - No breaking changes - middleware is optional
 - Status:
-  ✅ AutoMigrate() function created
-  ✅ Constitution clarified
-  ✅ All tests passing
+  ✅ Middleware pattern documented
+  ✅ Complete examples provided
+  ✅ Best practices defined
+  ✅ Execution order explained
 -->
 
 
@@ -569,6 +572,213 @@ func (s *productService) Create(ctx context.Context, req *pb.ProductCreateReques
         Description: product.Description,
     }, nil
 }
+```
+
+**Service Customization with Middleware Pattern**:
+
+Services MAY expose middleware functions to allow external applications to wrap and extend service operations. Middleware provides full control over execution flow, enabling external apps to run code before/after operations, abort execution, or transform inputs/outputs.
+
+**Middleware Pattern** (Recommended over simple hooks):
+```go
+// CreateMiddleware wraps the Create operation, providing full control
+// Parameters:
+//   - ctx: Request context
+//   - req: Creation request
+//   - next: Function to call core Create logic (can be skipped)
+// Returns: (*pb.Product, error)
+// 
+// Middleware can:
+//   - Run code before core logic
+//   - Decide whether to call next() or abort
+//   - Run code after core logic
+//   - Transform inputs or outputs
+//   - Handle or wrap errors
+type CreateMiddleware func(
+    ctx context.Context,
+    req *pb.ProductCreateRequest,
+    next func(context.Context, *pb.ProductCreateRequest) (*pb.Product, error),
+) (*pb.Product, error)
+
+// Service struct with pre-built middleware handler
+type productService struct {
+    db            *gorm.DB
+    createHandler func(context.Context, *pb.ProductCreateRequest) (*pb.Product, error)  // Pre-built chain
+}
+
+// Constructor builds middleware chain ONCE
+func NewProductService(db *gorm.DB, middlewares ...CreateMiddleware) ProductService {
+    svc := &productService{db: db}
+    
+    // Build middleware chain once in constructor (not on every call!)
+    handler := svc.coreCreate
+    
+    // Wrap with middleware (reverse order for correct execution)
+    for i := len(middlewares) - 1; i >= 0; i-- {
+        mw := middlewares[i]
+        next := handler
+        handler = func(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+            return mw(ctx, req, next)
+        }
+    }
+    
+    svc.createHandler = handler
+    return svc
+}
+
+// Core create logic (private)
+func (s *productService) coreCreate(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+    // Standard validation
+    if req.Name == "" {
+        return nil, fmt.Errorf("name: %w", ErrMissingRequired)
+    }
+    
+    // Create in database
+    product := &Product{Name: req.Name, SKU: req.Sku}
+    if err := s.db.WithContext(ctx).Create(product).Error; err != nil {
+        return nil, fmt.Errorf("create product: %w", err)
+    }
+    
+    return toProto(product), nil
+}
+
+// Public Create method simply executes pre-built chain
+func (s *productService) Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+    // Execute pre-built middleware chain (built once in constructor)
+    return s.createHandler(ctx, req)
+}
+```
+
+**External App Using Middleware**:
+```go
+import "yourapp/services"
+
+func main() {
+    db, _ := gorm.Open(...)
+    
+    // Middleware 1: Validation
+    validateSKU := func(
+        ctx context.Context,
+        req *pb.ProductCreateRequest,
+        next func(context.Context, *pb.ProductCreateRequest) (*pb.Product, error),
+    ) (*pb.Product, error) {
+        // Run before core logic
+        if !strings.HasPrefix(req.Sku, "ACME-") {
+            return nil, errors.New("SKU must start with ACME-")
+        }
+        
+        // Call next middleware or core logic
+        return next(ctx, req)
+    }
+    
+    // Middleware 2: Notification
+    notifySlack := func(
+        ctx context.Context,
+        req *pb.ProductCreateRequest,
+        next func(context.Context, *pb.ProductCreateRequest) (*pb.Product, error),
+    ) (*pb.Product, error) {
+        // Call next first
+        product, err := next(ctx, req)
+        if err != nil {
+            return nil, err
+        }
+        
+        // Run after core logic
+        sendSlackNotification(fmt.Sprintf("Created: %s", product.Name))
+        
+        return product, nil
+    }
+    
+    // Middleware 3: Audit logging
+    auditLog := func(
+        ctx context.Context,
+        req *pb.ProductCreateRequest,
+        next func(context.Context, *pb.ProductCreateRequest) (*pb.Product, error),
+    ) (*pb.Product, error) {
+        // Run before
+        startTime := time.Now()
+        userID := getUserIDFromContext(ctx)
+        
+        // Call next
+        product, err := next(ctx, req)
+        
+        // Run after (even if error)
+        auditDB.Log(&AuditEntry{
+            Action:   "product.create",
+            UserID:   userID,
+            Duration: time.Since(startTime),
+            Success:  err == nil,
+            Details:  fmt.Sprintf("SKU: %s", req.Sku),
+        })
+        
+        return product, err
+    }
+    
+    // Create service with middleware chain
+    productSvc := services.NewProductService(
+        db,
+        validateSKU,   // First: validate
+        auditLog,      // Second: audit
+        notifySlack,   // Third: notify
+    )
+    
+    // Use normally - middleware chain executes automatically
+    product, err := productSvc.Create(ctx, &pb.ProductCreateRequest{
+        Name: "Widget",
+        Sku:  "ACME-001",
+    })
+    
+    // Execution flow:
+    // 1. validateSKU runs → validates → calls next
+    // 2. auditLog runs (before) → calls next
+    // 3. notifySlack runs → calls next
+    // 4. coreCreate runs → creates product
+    // 5. notifySlack runs (after) → sends notification
+    // 6. auditLog runs (after) → logs audit
+    // 7. Return product
+}
+```
+
+**Middleware vs Hooks Comparison**:
+```go
+// Simple Hooks (less powerful)
+✅ Easy to understand
+✅ Simple use cases (notifications, logging)
+❌ Can't abort execution
+❌ Can't modify request/response
+❌ Limited control flow
+
+// Middleware Pattern (more powerful)
+✅ Full control over execution
+✅ Can abort (don't call next)
+✅ Can transform inputs/outputs
+✅ Can wrap errors
+✅ Composable chain
+✅ Familiar pattern (like HTTP middleware)
+```
+
+**Middleware Design Best Practices**:
+- ✅ Export middleware function type with clear documentation
+- ✅ Middleware receives `next` function to call core logic
+- ✅ Middleware can decide whether to call `next` (abort if needed)
+- ✅ Use variadic parameters for middleware list
+- ✅ Chain middleware in correct order (first in list executes first)
+- ✅ Document execution order clearly
+- ✅ Pass protobuf types (never internal models)
+- ✅ Provide example middleware for common use cases
+- ❌ Don't expose internal service state
+- ❌ Don't break service encapsulation
+
+**Common Middleware Use Cases**:
+- **Authorization**: Check permissions before allowing operation
+- **Validation**: Custom business rules that can reject operations
+- **Rate limiting**: Throttle operations per user/client
+- **Caching**: Check cache before database, update after
+- **Audit logging**: Track all operations with timing
+- **Notifications**: Send alerts on specific operations
+- **Transformations**: Modify requests or responses
+- **Error handling**: Wrap or transform errors
+- **Retry logic**: Retry failed operations
+- **Circuit breakers**: Fail fast when downstream is down
 ```
 
 **HTTP Handler (Thin Wrapper)**:
@@ -1534,4 +1744,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.9.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
+**Version**: 1.9.2 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
