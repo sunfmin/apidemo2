@@ -1,25 +1,32 @@
 <!--
 Sync Impact Report:
-- Version: 1.6.0 → 1.6.1 (PATCH bump - clarify test assertion best practices)
-- Modified principles:
-  - VI. Protobuf Data Structures - clarified test expected values must be built from REQUEST data
-- Clarifications added:
-  - Expected test data MUST be built from request data (what you sent)
-  - MUST NOT copy response data into expected values (defeats testing purpose)
-  - Generated fields (ID, timestamps) are the ONLY exception - copy from response
-  - Added examples showing correct vs incorrect expected value construction
-  - Added guidance on handling generated fields (3 options)
+- Version: 1.6.1 → 1.7.0 (MINOR bump - new principle added)
+- New principles added:
+  - X. Context-Aware Operations - All I/O and long-running operations MUST accept and respect context.Context
+- Principle details:
+  - HTTP handlers MUST extract context from http.Request
+  - Service methods MUST accept context.Context as first parameter
+  - Database operations MUST use ctx-aware GORM methods (WithContext)
+  - External calls MUST propagate context for cancellation and tracing
+  - Context MUST be respected for timeouts and cancellation
+  - Tests MUST verify context cancellation behavior
 - Rationale:
-  - Using response data as expected data creates tests that always pass
-  - Tests must validate that what you SENT matches what came BACK
-  - Only generated fields (unpredictable) should be copied from response
-  - This ensures tests actually verify API behavior correctness
+  - Enables request timeout control and cancellation propagation
+  - Supports distributed tracing context propagation
+  - Prevents resource leaks from abandoned operations
+  - Follows Go best practices for concurrent operations
+  - Enables graceful shutdown and cancellation
 - Impact:
-  - Existing tests should be reviewed for response data leaking into expectations
-  - Better test quality and actual bug detection
-  - Tests properly validate API contract fulfillment
+  - All new I/O operations MUST accept context.Context
+  - Service interfaces MUST include context.Context as first parameter
+  - Database calls MUST use db.WithContext(ctx)
+  - Tests MUST verify context cancellation where applicable
+  - Existing code should be migrated to use context
 - Templates requiring updates:
-  ✅ No template changes needed (guidance is in examples)
+  ✅ plan-template.md - already references context.Context in service layer examples
+  ✅ spec-template.md - edge case section can benefit but not required to change
+  ✅ tasks-template.md - already mentions context.Context in service layer guidance
+  ⚠️  No breaking changes - templates already demonstrate context usage
 -->
 
 
@@ -655,6 +662,251 @@ func RespondWithError(w http.ResponseWriter, errCode ErrorCode) {
 }
 ```
 
+### X. Context-Aware Operations
+
+All I/O and long-running operations MUST accept and respect `context.Context`:
+- All service methods MUST accept `context.Context` as the first parameter
+- HTTP handlers MUST extract context from `*http.Request` using `r.Context()`
+- Database operations MUST use context-aware GORM methods (e.g., `db.WithContext(ctx)`)
+- External HTTP calls MUST propagate context for timeout and cancellation
+- gRPC calls MUST propagate context for distributed tracing and cancellation
+- Long-running operations MUST check context cancellation periodically
+- Context MUST be used for OpenTracing span propagation (already covered in Principle VII)
+- Context cancellation MUST be respected to prevent resource leaks
+- Tests MUST verify context cancellation behavior for long-running operations
+- Tests MUST use `context.WithTimeout()` or `context.WithCancel()` to simulate cancellation scenarios
+
+**Rationale**: Context provides a standard way to propagate request-scoped values (like trace IDs), handle timeouts, and enable graceful cancellation across API boundaries. This prevents resource leaks from abandoned operations, enables coordinated shutdown, supports distributed tracing, and follows Go's idiomatic patterns for concurrent programming. Without context, operations cannot be cancelled and resources may leak when clients disconnect.
+
+**Example - Service Layer with Context**:
+```go
+// Service interface - context as first parameter (MANDATORY)
+type ProductService interface {
+    Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error)
+    Get(ctx context.Context, id string) (*pb.Product, error)
+    List(ctx context.Context, limit, offset int) ([]*pb.Product, error)
+    Update(ctx context.Context, id string, req *pb.ProductUpdateRequest) (*pb.Product, error)
+    Delete(ctx context.Context, id string) error
+}
+
+// Service implementation respects context
+func (s *productService) Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+    // Start tracing span from context
+    span, ctx := opentracing.StartSpanFromContext(ctx, "ProductService.Create")
+    defer span.Finish()
+    
+    // Validate business rules
+    if req.Name == "" {
+        return nil, errors.New("product name required")
+    }
+    
+    // Create entity
+    product := &Product{
+        Name:        req.Name,
+        SKU:         req.Sku,
+        Description: req.Description,
+    }
+    
+    // Use context-aware database operations (MANDATORY)
+    tx := s.db.WithContext(ctx).Begin()
+    defer tx.Rollback()
+    
+    // Check context cancellation before expensive operations
+    select {
+    case <-ctx.Done():
+        return nil, ctx.Err() // Return context error (timeout or cancellation)
+    default:
+        // Continue with operation
+    }
+    
+    if err := tx.Create(product).Error; err != nil {
+        s.logger.Error("failed to create product", err)
+        return nil, err
+    }
+    
+    if err := tx.Commit().Error; err != nil {
+        return nil, err
+    }
+    
+    return toProto(product), nil
+}
+```
+
+**HTTP Handler - Extract Context**:
+```go
+// HTTP handler extracts context from request
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    // Extract context from HTTP request (MANDATORY)
+    ctx := r.Context()
+    
+    // Create tracing span with context
+    span, ctx := opentracing.StartSpanFromContext(ctx, "POST /api/products")
+    defer span.Finish()
+    
+    // Parse request
+    var req pb.ProductCreateRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid request", 400)
+        return
+    }
+    
+    // Pass context to service (context propagation)
+    product, err := h.service.Create(ctx, &req)
+    if err != nil {
+        // Check if error was due to context cancellation
+        if err == context.Canceled {
+            http.Error(w, "Request cancelled", 499) // Client closed connection
+            return
+        }
+        if err == context.DeadlineExceeded {
+            http.Error(w, "Request timeout", 504) // Gateway timeout
+            return
+        }
+        
+        span.SetTag("error", true)
+        http.Error(w, err.Error(), 500)
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(product)
+}
+```
+
+**External HTTP Calls with Context**:
+```go
+// Making HTTP calls to external services with context propagation
+func (s *productService) FetchExternalData(ctx context.Context, url string) (*Data, error) {
+    // Create HTTP request with context (MANDATORY)
+    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Inject tracing headers
+    carrier := opentracing.HTTPHeadersCarrier(req.Header)
+    if err := opentracing.GlobalTracer().Inject(
+        opentracing.SpanFromContext(ctx).Context(),
+        opentracing.HTTPHeaders,
+        carrier,
+    ); err != nil {
+        return nil, err
+    }
+    
+    // Make request - will respect context timeout/cancellation
+    resp, err := s.httpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+    
+    var data Data
+    if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+        return nil, err
+    }
+    
+    return &data, nil
+}
+```
+
+**Testing Context Cancellation**:
+```go
+func TestProductService_Create_ContextCancellation(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products")
+    
+    service := NewProductService(db, logger, cache)
+    
+    // Create context with immediate cancellation
+    ctx, cancel := context.WithCancel(context.Background())
+    cancel() // Cancel immediately
+    
+    req := &pb.ProductCreateRequest{
+        Name: "Test Product",
+        Sku:  "TEST-001",
+    }
+    
+    // Service should respect cancellation
+    product, err := service.Create(ctx, req)
+    
+    // Verify context cancellation was respected
+    if err != context.Canceled {
+        t.Errorf("Expected context.Canceled error, got: %v", err)
+    }
+    if product != nil {
+        t.Error("Expected nil product when context cancelled")
+    }
+    
+    // Verify no data was committed to database
+    var count int64
+    db.Model(&Product{}).Count(&count)
+    if count != 0 {
+        t.Error("Expected no products in database after cancellation")
+    }
+}
+
+func TestProductService_Create_ContextTimeout(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products")
+    
+    service := NewProductService(db, logger, cache)
+    
+    // Create context with very short timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+    defer cancel()
+    
+    time.Sleep(10 * time.Millisecond) // Ensure timeout expires
+    
+    req := &pb.ProductCreateRequest{
+        Name: "Test Product",
+        Sku:  "TEST-001",
+    }
+    
+    // Service should respect timeout
+    product, err := service.Create(ctx, req)
+    
+    // Verify timeout was respected
+    if err != context.DeadlineExceeded {
+        t.Errorf("Expected context.DeadlineExceeded error, got: %v", err)
+    }
+    if product != nil {
+        t.Error("Expected nil product when context timeout")
+    }
+}
+```
+
+**Long-Running Operations**:
+```go
+// For operations that process many items, check context periodically
+func (s *productService) BulkUpdate(ctx context.Context, updates []*pb.ProductUpdate) error {
+    tx := s.db.WithContext(ctx).Begin()
+    defer tx.Rollback()
+    
+    for i, update := range updates {
+        // Check context cancellation every N iterations
+        if i%100 == 0 {
+            select {
+            case <-ctx.Done():
+                return ctx.Err() // Stop processing if cancelled
+            default:
+                // Continue processing
+            }
+        }
+        
+        // Perform update
+        if err := tx.Model(&Product{}).
+            Where("id = ?", update.Id).
+            Updates(update).Error; err != nil {
+            return err
+        }
+    }
+    
+    return tx.Commit().Error
+}
+```
+
 ## Technology Stack
 
 - **Language**: Go 1.21+ (recommend latest stable)
@@ -942,6 +1194,11 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 - Reviewers MUST verify truncation uses CASCADE for foreign key dependencies
 - Reviewers MUST verify error codes use singleton struct instances (no hardcoded strings)
 - Reviewers MUST verify new error types are added to singleton, not inline
+- Reviewers MUST verify all service methods accept `context.Context` as first parameter
+- Reviewers MUST verify HTTP handlers extract context from `r.Context()`
+- Reviewers MUST verify database operations use `db.WithContext(ctx)`
+- Reviewers MUST verify external HTTP calls use `http.NewRequestWithContext(ctx, ...)`
+- Reviewers MUST verify context is propagated through all layers (HTTP → Service → Repository)
 - Tests MUST be reviewed before implementation code
 
 ## Governance
@@ -952,7 +1209,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 2. Changes MUST be reviewed by project lead or team
 3. Version MUST be incremented per semantic versioning:
    - **MAJOR**: Backward incompatible principle changes (e.g., removing no-mocking rule, allowing map[string]interface{})
-   - **MINOR**: New principles added or major expansions (e.g., adding protobuf requirement, adding tracing requirement, adding error definitions requirement)
+   - **MINOR**: New principles added or major expansions (e.g., adding protobuf requirement, adding tracing requirement, adding error definitions requirement, adding context-aware operations requirement)
    - **PATCH**: Clarifications, examples, typo fixes
 4. All dependent templates and documentation MUST be updated to reflect changes
 
@@ -967,4 +1224,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.6.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-16
+**Version**: 1.7.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
