@@ -883,9 +883,7 @@ func TestProductHandler_Create(t *testing.T) {
     defer truncateTables(db, "products")
     
     // Setup service with real dependencies
-    logger := NewLogger()
-    cache := NewCache()
-    service := NewProductService(db, logger, cache)
+    service := NewProductService(db)
     
     // Setup HTTP handler
     handler := NewProductHandler(service)
@@ -902,15 +900,30 @@ func TestProductHandler_Create(t *testing.T) {
     // Test through HTTP layer (exercises Service → Repository)
     handler.Create(rec, req)
     
-    // Assert HTTP response
-    if rec.Code != 200 {
-        t.Errorf("Expected 200, got %d", rec.Code)
+    // Assert HTTP response status
+    if rec.Code != http.StatusCreated {
+        t.Errorf("Expected %d, got %d", http.StatusCreated, rec.Code)
     }
     
-    var product pb.Product
-    json.NewDecoder(rec.Body).Decode(&product)
-    if product.Name != reqBody.Name {
-        t.Errorf("Expected name %s, got %s", reqBody.Name, product.Name)
+    // Parse response
+    var response pb.CreateProductResponse
+    if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+        t.Fatalf("Failed to decode response: %v", err)
+    }
+    
+    // Use protocmp to compare entire response (MANDATORY per Principle VI)
+    expected := &pb.CreateProductResponse{
+        Product: &pb.Product{
+            Id:          response.Product.Id,  // Use generated ID
+            Name:        reqBody.Name,
+            Sku:         reqBody.Sku,
+            CreatedAt:   response.Product.CreatedAt,  // Use generated timestamp
+            UpdatedAt:   response.Product.UpdatedAt,
+        },
+    }
+    
+    if diff := cmp.Diff(expected, &response, protocmp.Transform()); diff != "" {
+        t.Errorf("Response mismatch (-want +got):\n%s", diff)
     }
     
     // Note: This test covers HTTP parsing, service business logic, 
@@ -1601,12 +1614,13 @@ func TestProductCreateWithHelper(t *testing.T) {
         t.Fatalf("Failed: %v", err)
     }
     
-    // Verify product was created
+    // Verify product was created in database
     var found Product
     if err := db.First(&found, product.ID).Error; err != nil {
         t.Fatalf("Product not found: %v", err)
     }
     
+    // Use simple field check for GORM model (not protobuf)
     if found.Name != product.Name {
         t.Errorf("Expected name %s, got %s", product.Name, found.Name)
     }
