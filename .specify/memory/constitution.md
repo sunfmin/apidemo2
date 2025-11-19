@@ -1,31 +1,30 @@
 <!--
 Sync Impact Report:
-- Version: 1.8.1 → 1.9.0 (MINOR bump - consolidate and simplify error handling)
-- Principles merged and enhanced:
-  - IX + XI → IX. Comprehensive Error Handling (merged)
-  - Added ServiceErr field to ErrorCode for automatic mapping
-  - Eliminates complex switch statements in handlers
+- Version: 1.9.0 → 1.9.1 (PATCH bump - clarify migration strategy for external apps)
+- Clarifications added:
+  - Services MUST export AutoMigrate() function for external apps
+  - External apps need database migrations but can't import internal/models
+  - Solution: services.AutoMigrate(db) wraps internal model migrations
 - Changes:
-  - Merged Principles IX and XI into single comprehensive principle
-  - Added optional ServiceErr field to ErrorCode struct
-  - Shows automatic error mapping via AllErrors() iteration
-  - Reduced from 11 to 10 principles (simplification)
-  - Handler example now shows clean, simple error handling
-- Benefits:
-  - NO complex switch statements needed in handlers
-  - Single line per error mapping (in ErrorCode definition)
-  - Automatic type-safe checking via errors.Is()
-  - Easy to add new errors (just add to Errors struct)
-  - Single source of truth for service→HTTP mapping
+  - Added guidance on AutoMigrate() function requirement
+  - Added example services/migrations.go implementation
+  - Updated external usage examples to show AutoMigrate() call
+  - Models still stay internal (encapsulation preserved)
+- Rationale:
+  - External apps using services need database schema
+  - Can't import internal/models to run AutoMigrate themselves
+  - Exporting AutoMigrate() from services solves this cleanly
+  - Services control their own schema requirements
+  - Models remain encapsulated (don't expose GORM internals)
 - Impact:
-  - Handlers simplified dramatically (5 lines vs 30+ lines)
-  - New errors only need one line in Errors struct
-  - Existing code can be refactored to use simpler pattern
-  - All requirements preserved
+  - Services must export AutoMigrate() function
+  - External apps call services.AutoMigrate(db) before using services
+  - No need to move models to public packages
+  - Clean separation maintained
 - Status:
+  ✅ AutoMigrate() function created
+  ✅ Constitution clarified
   ✅ All tests passing
-  ✅ 100% compliance maintained
-  ✅ Simpler, cleaner, more maintainable
 -->
 
 
@@ -464,6 +463,48 @@ product, _ := svc.Create(ctx, &pb.CreateProductRequest{...})
 - ✅ External apps only need to import services and protobuf packages, not models
 - ✅ Go's compiler is happy - public services return public types (protobuf)
 
+**CRITICAL - Database Migrations for External Apps**: External applications using services need to run database migrations, but cannot import internal models. **Solution**: Services MUST export an `AutoMigrate()` function that runs migrations on behalf of external apps:
+
+```go
+// services/migrations.go (PUBLIC package)
+package services
+
+import (
+    "gorm.io/gorm"
+    "yourapp/internal/models"  // Internal use within service package
+)
+
+// AutoMigrate runs all necessary database migrations for services
+// External apps MUST call this before using services
+func AutoMigrate(db *gorm.DB) error {
+    return db.AutoMigrate(
+        &models.ProductTemplate{},
+        &models.Product{},
+        &models.ProductPricing{},
+        &models.ProductInventory{},
+        &models.ProductVariant{},
+        &models.VariantPricing{},
+        &models.VariantInventory{},
+        &models.MediaFile{},
+    )
+}
+
+// External app usage:
+import "yourapp/services"
+
+db, _ := gorm.Open(...)
+if err := services.AutoMigrate(db); err != nil {  // ✅ Migrates schema
+    log.Fatal(err)
+}
+svc := services.NewProductService(db)  // ✅ Ready to use
+```
+
+This approach:
+- ✅ Keeps models internal (encapsulation)
+- ✅ Allows external apps to migrate schema
+- ✅ Services control their own schema requirements
+- ✅ No need to expose GORM model internals
+
 **Middleware Rationale**: Middleware is application-specific implementation (logging format, CORS policies, recovery behavior). External apps reusing your handlers should apply their own middleware. Keep middleware internal unless you're building a middleware library.
 
 **Example Service Interface**:
@@ -587,6 +628,12 @@ func main() {
 // Application 2: Background worker (shares same db/logger)
 func main() {
     db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    
+    // Run migrations first (REQUIRED for external apps)
+    if err := services.AutoMigrate(db); err != nil {
+        log.Fatalf("Migration failed: %v", err)
+    }
+    
     logger := NewLogger()
     cache := NewCache()
     
@@ -605,6 +652,9 @@ func main() {
 import "github.com/yourorg/apidemo2/services"  // PUBLIC package (not internal/)
 
 func processOrders() {
+    // Run migrations once at app startup
+    services.AutoMigrate(sharedDB)
+    
     // Import and use services directly
     productSvc := services.NewProductService(sharedDB, sharedLogger, sharedCache)
     
@@ -1484,4 +1534,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.9.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
+**Version**: 1.9.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19

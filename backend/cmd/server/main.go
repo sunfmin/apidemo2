@@ -14,7 +14,6 @@ import (
 
 	"github.com/sunfmin/apidemo2/backend/handlers"
 	"github.com/sunfmin/apidemo2/backend/internal/middleware"
-	"github.com/sunfmin/apidemo2/backend/internal/models"
 	"github.com/sunfmin/apidemo2/backend/services"
 )
 
@@ -46,17 +45,8 @@ func main() {
 	}
 	log.Println("✅ Database connected")
 
-	// Run auto-migration
-	if err := db.AutoMigrate(
-		&models.ProductTemplate{},
-		&models.Product{},
-		&models.ProductPricing{},
-		&models.ProductInventory{},
-		&models.ProductVariant{},
-		&models.VariantPricing{},
-		&models.VariantInventory{},
-		&models.MediaFile{},
-	); err != nil {
+	// Run auto-migration using services.AutoMigrate
+	if err := services.AutoMigrate(db); err != nil {
 		log.Fatalf("❌ Failed to run migrations: %v", err)
 	}
 	log.Println("✅ Database migrations complete")
