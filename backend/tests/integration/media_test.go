@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,24 +194,45 @@ func TestMediaHandler_Upload(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				// Verify response fields
+				// Verify generated fields exist
 				if response.MediaFile == nil {
 					t.Fatal("Expected media file in response")
 				}
 				if response.MediaFile.Id == "" {
 					t.Error("Expected media file ID")
 				}
-				if response.MediaFile.EntityType != tc.fields["entity_type"] {
-					t.Errorf("Expected entity_type %s, got %s", tc.fields["entity_type"], response.MediaFile.EntityType)
-				}
-				if response.MediaFile.FileType != pb.MediaFileType_MEDIA_FILE_TYPE_IMAGE {
-					t.Errorf("Expected file type IMAGE, got %v", response.MediaFile.FileType)
-				}
 				if response.MediaFile.Url == "" {
 					t.Error("Expected URL to be set")
 				}
 				if response.MediaFile.ThumbnailUrl == "" {
 					t.Error("Expected thumbnail URL to be set")
+				}
+
+				// Build expected response
+				expectedResponse := &pb.UploadMediaResponse{
+					MediaFile: &pb.MediaFile{
+						Id:            response.MediaFile.Id, // Generated
+						EntityType:    tc.fields["entity_type"],
+						EntityId:      tc.fields["entity_id"],
+						AttributeName: tc.fields["attribute_name"],
+						FileType:      pb.MediaFileType_MEDIA_FILE_TYPE_IMAGE,
+						MimeType:      "image/jpeg",                // Known from createTestImageFile
+						FileName:      filepath.Base(tc.filePath),  // Known
+						// FilePath is internal, not in proto
+						Url:           response.MediaFile.Url,      // Generated
+						ThumbnailUrl:  response.MediaFile.ThumbnailUrl, // Generated
+						FileSize:      response.MediaFile.FileSize,     // Generated
+						Width:         100,                             // Known from createTestImageFile
+						Height:        100,                             // Known from createTestImageFile
+						DisplayOrder:  0,                               // Default
+						CreatedAt:     response.MediaFile.CreatedAt,    // Generated
+						// UpdatedAt is not in proto
+					},
+				}
+
+				// Compare using protocmp
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 
 				// Verify database record
@@ -314,8 +336,32 @@ func TestMediaHandler_Get(t *testing.T) {
 				if response.MediaFile == nil {
 					t.Fatal("Expected media file in response")
 				}
-				if response.MediaFile.Id != tc.mediaID {
-					t.Errorf("Expected ID %s, got %s", tc.mediaID, response.MediaFile.Id)
+
+				// Build expected response from fixture data
+				expectedResponse := &pb.GetMediaResponse{
+					MediaFile: &pb.MediaFile{
+						Id:            mediaFile.ID,
+						EntityType:    mediaFile.EntityType,
+						EntityId:      mediaFile.EntityID,
+						AttributeName: mediaFile.AttributeName,
+						FileType:      pb.MediaFileType_MEDIA_FILE_TYPE_IMAGE,
+						MimeType:      mediaFile.MimeType,
+						FileName:      mediaFile.FileName,
+						// FilePath is internal
+						Url:           response.MediaFile.Url, // Generated/Mocked in service
+						ThumbnailUrl:  response.MediaFile.ThumbnailUrl, // Generated/Mocked
+						FileSize:      mediaFile.FileSize,
+						Width:         mediaFile.Width,
+						Height:        mediaFile.Height,
+						DisplayOrder:  mediaFile.DisplayOrder,
+						CreatedAt:     response.MediaFile.CreatedAt, // Generated
+						// UpdatedAt not in proto
+					},
+				}
+
+				// Compare using protocmp
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -479,16 +525,79 @@ func TestMediaHandler_List(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				// Verify count
-				if len(response.MediaFiles) != tc.expectedCount {
-					t.Errorf("Expected %d media files, got %d", tc.expectedCount, len(response.MediaFiles))
+				// Build expected response from fixtures
+				expectedResponse := &pb.ListMediaResponse{
+					MediaFiles: []*pb.MediaFile{},
 				}
 
-				// Verify display order
-				for i := 0; i < len(response.MediaFiles)-1; i++ {
-					if response.MediaFiles[i].DisplayOrder > response.MediaFiles[i+1].DisplayOrder {
-						t.Error("Media files not sorted by display_order")
+				// Filter fixtures based on query params
+				// This duplicates some logic but ensures we validate against known state
+				var filteredFiles []*models.MediaFile
+				for _, mf := range mediaFiles {
+					match := true
+					if tc.queryParams["entity_type"] != "" && mf.EntityType != tc.queryParams["entity_type"] {
+						match = false
 					}
+					if tc.queryParams["entity_id"] != "" && mf.EntityID != tc.queryParams["entity_id"] {
+						match = false
+					}
+					if tc.queryParams["attribute_name"] != "" && mf.AttributeName != tc.queryParams["attribute_name"] {
+						match = false
+					}
+					if tc.queryParams["file_type"] != "" && mf.FileType != tc.queryParams["file_type"] {
+						match = false
+					}
+					if match {
+						filteredFiles = append(filteredFiles, mf)
+					}
+				}
+
+				// Sort filteredFiles by DisplayOrder to match API response
+				// API sorts by display_order ASC, then created_at DESC (usually) or ID
+				// Let's assume stable sort by DisplayOrder
+				// We need to sort filteredFiles manually here
+				for i := 0; i < len(filteredFiles); i++ {
+					for j := i + 1; j < len(filteredFiles); j++ {
+						if filteredFiles[i].DisplayOrder > filteredFiles[j].DisplayOrder {
+							filteredFiles[i], filteredFiles[j] = filteredFiles[j], filteredFiles[i]
+						}
+					}
+				}
+
+				// Map to protobuf
+				for i, mf := range filteredFiles {
+					// Find corresponding response item to get generated fields
+					// Assuming order is preserved (or we should sort both)
+					var respItem *pb.MediaFile
+					if i < len(response.MediaFiles) {
+						respItem = response.MediaFiles[i]
+					} else {
+						respItem = &pb.MediaFile{} // Should not happen if counts match
+					}
+
+					expectedResponse.MediaFiles = append(expectedResponse.MediaFiles, &pb.MediaFile{
+						Id:            mf.ID,
+						EntityType:    mf.EntityType,
+						EntityId:      mf.EntityID,
+						AttributeName: mf.AttributeName,
+						FileType:      pb.MediaFileType(pb.MediaFileType_value["MEDIA_FILE_TYPE_"+strings.ToUpper(mf.FileType)]),
+						MimeType:      mf.MimeType,
+						FileName:      mf.FileName,
+						// FilePath is internal
+						Url:           respItem.Url,          // Generated
+						ThumbnailUrl:  respItem.ThumbnailUrl, // Generated
+						FileSize:      mf.FileSize,
+						Width:         mf.Width,
+						Height:        mf.Height,
+						DisplayOrder:  mf.DisplayOrder,
+						CreatedAt:     respItem.CreatedAt, // Generated
+						// UpdatedAt not in proto
+					})
+				}
+
+				// Compare using protocmp
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -610,11 +719,44 @@ func TestMediaHandler_Update(t *testing.T) {
 				if response.MediaFile == nil {
 					t.Fatal("Expected media file in response")
 				}
-				if tc.request.DisplayOrder != 0 && response.MediaFile.DisplayOrder != tc.request.DisplayOrder {
-					t.Errorf("Expected display_order %d, got %d", tc.request.DisplayOrder, response.MediaFile.DisplayOrder)
+
+				// Build expected response
+				// Copy original values from fixture/DB
+				var currentMedia models.MediaFile
+				db.First(&currentMedia, "id = ?", tc.mediaID)
+
+				expectedResponse := &pb.UpdateMediaResponse{
+					MediaFile: &pb.MediaFile{
+						Id:            tc.mediaID,
+						EntityType:    currentMedia.EntityType,
+						EntityId:      currentMedia.EntityID,
+						AttributeName: currentMedia.AttributeName,
+						FileType:      pb.MediaFileType_MEDIA_FILE_TYPE_IMAGE,
+						MimeType:      currentMedia.MimeType,
+						FileName:      currentMedia.FileName, // Should match request if updated
+						// FilePath is internal
+						Url:           response.MediaFile.Url,          // Generated
+						ThumbnailUrl:  response.MediaFile.ThumbnailUrl, // Generated
+						FileSize:      currentMedia.FileSize,
+						Width:         currentMedia.Width,
+						Height:        currentMedia.Height,
+						DisplayOrder:  currentMedia.DisplayOrder,    // Should match request if updated
+						CreatedAt:     response.MediaFile.CreatedAt, // Generated
+						// UpdatedAt not in proto
+					},
 				}
-				if tc.request.FileName != "" && response.MediaFile.FileName != tc.request.FileName {
-					t.Errorf("Expected file_name %s, got %s", tc.request.FileName, response.MediaFile.FileName)
+
+				// Apply expected updates from request
+				if tc.request.DisplayOrder != 0 {
+					expectedResponse.MediaFile.DisplayOrder = tc.request.DisplayOrder
+				}
+				if tc.request.FileName != "" {
+					expectedResponse.MediaFile.FileName = tc.request.FileName
+				}
+
+				// Compare using protocmp
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform()); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -871,18 +1013,53 @@ func TestMediaHandler_Reorder(t *testing.T) {
 					t.Fatalf("Failed to decode response: %v", err)
 				}
 
-				// Verify order
-				if len(response.MediaFiles) != len(tc.expectedOrder) {
-					t.Errorf("Expected %d media files, got %d", len(tc.expectedOrder), len(response.MediaFiles))
+				// Build expected response
+				expectedResponse := &pb.ReorderMediaResponse{
+					MediaFiles: []*pb.MediaFile{},
 				}
 
-				for i, expectedID := range tc.expectedOrder {
-					if response.MediaFiles[i].Id != expectedID {
-						t.Errorf("Expected ID %s at position %d, got %s", expectedID, i, response.MediaFiles[i].Id)
+				for i, id := range tc.expectedOrder {
+					// Find the original media file in fixtures to get details
+					var original *models.MediaFile
+					if id == media1.ID {
+						original = media1
+					} else if id == media2.ID {
+						original = media2
+					} else if id == media3.ID {
+						original = media3
 					}
-					if response.MediaFiles[i].DisplayOrder != int32(i) {
-						t.Errorf("Expected display_order %d, got %d", i, response.MediaFiles[i].DisplayOrder)
+
+					// Find corresponding response item for generated fields
+					var respItem *pb.MediaFile
+					if i < len(response.MediaFiles) {
+						respItem = response.MediaFiles[i]
+					} else {
+						respItem = &pb.MediaFile{}
 					}
+
+					expectedResponse.MediaFiles = append(expectedResponse.MediaFiles, &pb.MediaFile{
+						Id:            original.ID,
+						EntityType:    original.EntityType,
+						EntityId:      original.EntityID,
+						AttributeName: original.AttributeName,
+						FileType:      pb.MediaFileType_MEDIA_FILE_TYPE_IMAGE,
+						MimeType:      original.MimeType,
+						FileName:      original.FileName,
+						// FilePath is internal
+						Url:           respItem.Url,          // Generated
+						ThumbnailUrl:  respItem.ThumbnailUrl, // Generated
+						FileSize:      original.FileSize,
+						Width:         0, // Fixtures didn't set width/height explicitly in struct but let's assume 0 or what DB has
+						Height:        0,
+						DisplayOrder:  int32(i),           // Updated order
+						CreatedAt:     respItem.CreatedAt, // Generated
+						// UpdatedAt not in proto
+					})
+				}
+
+				// Compare using protocmp
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform(), protocmp.IgnoreFields(&pb.MediaFile{}, "width", "height")); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
@@ -918,58 +1095,161 @@ func TestMediaHandler_BulkUpload(t *testing.T) {
 	imagePath2, cleanup2 := createTestImageFile(t)
 	defer cleanup2()
 
-	t.Run("successful_bulk_upload", func(t *testing.T) {
-		// Create multipart form with multiple files
-		body := &bytes.Buffer{}
-		writer := multipart.NewWriter(body)
+	testCases := []struct {
+		name           string
+		fields         map[string]string
+		files          map[string]string // filename -> filepath
+		expectedStatus int
+		expectedCount  int
+		expectedError  bool
+	}{
+		{
+			name: "successful_bulk_upload",
+			fields: map[string]string{
+				"entity_type":    "product",
+				"entity_id":      product.ID,
+				"attribute_name": "ProductImage",
+			},
+			files: map[string]string{
+				"image1.jpg": imagePath1,
+				"image2.jpg": imagePath2,
+			},
+			expectedStatus: http.StatusCreated,
+			expectedCount:  2,
+			expectedError:  false,
+		},
+		{
+			name: "missing_fields",
+			fields: map[string]string{
+				"entity_type": "product",
+				// Missing ID and Attribute
+			},
+			files: map[string]string{
+				"image1.jpg": imagePath1,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			expectedError:  true,
+		},
+		{
+			name: "no_files",
+			fields: map[string]string{
+				"entity_type":    "product",
+				"entity_id":      product.ID,
+				"attribute_name": "ProductImage",
+			},
+			files:          map[string]string{},
+			expectedStatus: http.StatusBadRequest,
+			expectedCount:  0,
+			expectedError:  true,
+		},
+	}
 
-		// Add form fields
-		writer.WriteField("entity_type", "product")
-		writer.WriteField("entity_id", product.ID)
-		writer.WriteField("attribute_name", "ProductImage")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create multipart form
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
 
-		// Add first file
-		file1, _ := os.Open(imagePath1)
-		defer file1.Close()
-		part1, _ := writer.CreateFormFile("files", "image1.jpg")
-		io.Copy(part1, file1)
+			// Add form fields
+			for k, v := range tc.fields {
+				writer.WriteField(k, v)
+			}
 
-		// Add second file
-		file2, _ := os.Open(imagePath2)
-		defer file2.Close()
-		part2, _ := writer.CreateFormFile("files", "image2.jpg")
-		io.Copy(part2, file2)
+			// Add files
+			for name, path := range tc.files {
+				file, _ := os.Open(path)
+				defer file.Close()
+				part, _ := writer.CreateFormFile("files", name)
+				io.Copy(part, file)
+			}
 
-		contentType := writer.FormDataContentType()
-		writer.Close()
+			contentType := writer.FormDataContentType()
+			writer.Close()
 
-		// Create HTTP request
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/media/upload/bulk", body)
-		req.Header.Set("Content-Type", contentType)
-		rec := httptest.NewRecorder()
+			// Create HTTP request
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/media/upload/bulk", body)
+			req.Header.Set("Content-Type", contentType)
+			rec := httptest.NewRecorder()
 
-		// Execute handler
-		handler.UploadBulk(rec, req)
+			// Execute handler
+			handler.UploadBulk(rec, req)
 
-		// Assert response status
-		if rec.Code != http.StatusCreated {
-			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusCreated, rec.Code, rec.Body.String())
-		}
+			// Assert response status
+			if rec.Code != tc.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Body: %s", tc.expectedStatus, rec.Code, rec.Body.String())
+			}
 
-		// Parse response
-		var response pb.BulkUploadMediaResponse
-		if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
+			if !tc.expectedError {
+				// Parse response
+				var response pb.BulkUploadMediaResponse
+				if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
 
-		// Verify results
-		if len(response.MediaFiles) != 2 {
-			t.Errorf("Expected 2 media files uploaded, got %d", len(response.MediaFiles))
-		}
-		if len(response.Errors) != 0 {
-			t.Errorf("Expected 0 errors, got %d", len(response.Errors))
-		}
-	})
+				// Verify count
+				if len(response.MediaFiles) != tc.expectedCount {
+					t.Errorf("Expected %d media files, got %d", tc.expectedCount, len(response.MediaFiles))
+				}
+
+				// Build expected response
+				expectedResponse := &pb.BulkUploadMediaResponse{
+					MediaFiles: []*pb.MediaFile{},
+					Errors:     []*pb.BulkUploadError{}, // Empty for success
+				}
+
+				// We can't predict exact order or generated IDs easily for bulk,
+				// but we can iterate response and match against input files by name?
+				// Or just verify structure if strict comparison is too hard.
+				// Constitution requires "Expected values built from request".
+				// Let's try to match by filename.
+
+				for _, uploaded := range response.MediaFiles {
+					// Find which input file this corresponds to (by filename)
+					// Note: The handler uses the filename provided in CreateFormFile
+					// which we set to key in tc.files map.
+					// But filepath.Base(tc.filePath) might be "test-image.jpg" for both if created same way.
+					// We manually set "image1.jpg" and "image2.jpg" in the test setup above.
+					
+					expectedResponse.MediaFiles = append(expectedResponse.MediaFiles, &pb.MediaFile{
+						Id:            uploaded.Id, // Generated
+						EntityType:    tc.fields["entity_type"],
+						EntityId:      tc.fields["entity_id"],
+						AttributeName: tc.fields["attribute_name"],
+						FileType:      pb.MediaFileType_MEDIA_FILE_TYPE_IMAGE,
+						MimeType:      "image/jpeg",
+						FileName:      uploaded.FileName, // Should be one of the input names
+						// FilePath is internal
+						Url:           uploaded.Url,      // Generated
+						ThumbnailUrl:  uploaded.ThumbnailUrl, // Generated
+						FileSize:      uploaded.FileSize,
+						Width:         100,
+						Height:        100,
+						DisplayOrder:  0, // Can be 0 or incrementing depending on logic
+						CreatedAt:     uploaded.CreatedAt,
+						// UpdatedAt not in proto
+					})
+				}
+				
+				// Sort by ID to ensure deterministic comparison if needed, 
+				// but since we built expected from actual, order should match if we append in same order.
+				// Actually, we iterated response to build expected, so order is guaranteed to match response.
+				
+				// For DisplayOrder, BulkUpload service likely increments it.
+				// Let's not be too strict on DisplayOrder in this loop unless we know logic.
+				// Service likely appends to end.
+				
+				// We need to ignore DisplayOrder in comparison or fetch from DB to be sure.
+				// Let's rely on ignoreFields for generated/dynamic stuff that we copied.
+
+				// Compare using protocmp
+				// We basically constructed expected == actual for generated fields, validating only the ones we hardcoded (EntityType, etc)
+				if diff := cmp.Diff(expectedResponse, &response, protocmp.Transform(), protocmp.IgnoreFields(&pb.MediaFile{}, "display_order")); diff != "" {
+					t.Errorf("Response mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
 
 	t.Log("✅ All test cases passed")
 }
