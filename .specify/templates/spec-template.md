@@ -117,6 +117,20 @@
 - Verify tests do NOT use `==` or `reflect.DeepEqual` for protobuf messages
 - Verify complete message comparison catches all field differences
 
+**Context Handling**:
+- Verify context.Context is passed through all layers (HTTP → Service → Repository)
+- Verify context cancellation is handled properly in long-running operations
+- Test timeout scenarios with `context.WithTimeout()`
+- Test cancellation scenarios with `context.WithCancel()`
+- Verify database operations use `db.WithContext(ctx)`
+
+**Error Handling**:
+- Verify errors are wrapped with `fmt.Errorf("%w", err)` (NOT `%v`)
+- Verify error messages include contextual information at each layer
+- Verify error checking uses `errors.Is()` and `errors.As()` (NOT string comparison)
+- Verify HTTP handlers do NOT expose internal error details to clients
+- Verify tests validate error chains with `errors.Is()` and `errors.As()`
+
 ## Requirements *(mandatory)*
 
 <!--

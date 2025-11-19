@@ -112,6 +112,9 @@ description: "Task list template for feature implementation"
   - Use `cmp.Diff()` with `protocmp.Transform()` for ALL protobuf message assertions (MANDATORY)
   - Do NOT use individual field comparisons for protobuf messages
   - Verify OpenTracing spans are created (NoopTracer default, mock tracer for span verification tests)
+  - Verify context.Context is passed through all layers (HTTP → Service → Repository)
+  - Verify errors are wrapped with contextual information using `fmt.Errorf("%w", err)`
+  - Verify error checking uses `errors.Is()` and `errors.As()` (NOT string comparison)
   - Table-driven test structure with test case structs
 
 ### Implementation for User Story 1
@@ -119,9 +122,9 @@ description: "Task list template for feature implementation"
 - [ ] T023 [P] [US1] Create [Entity1] GORM model in [package]/[entity1].go
 - [ ] T024 [P] [US1] Create [Entity2] GORM model in [package]/[entity2].go
 - [ ] T025 [US1] Implement GORM database repository in [package]/[repository].go (depends on T023, T024)
-- [ ] T026 [P] [US1] Define service interface in [package]/service.go with business logic methods
+- [ ] T026 [P] [US1] Define service interface in [package]/service.go with business logic methods (all methods MUST accept context.Context as first parameter)
 - [ ] T027 [US1] Implement service with dependency injection (db, logger, cache) in [package]/service_impl.go
-- [ ] T028 [US1] Implement business logic in service methods (validation, transactions, error handling)
+- [ ] T028 [US1] Implement business logic in service methods (validation, transactions, error wrapping with fmt.Errorf %w verb)
 - [ ] T029 [US1] Implement ServeHTTP handler as thin wrapper in [package]/handler.go (delegates to service)
 - [ ] T030 [US1] Add OpenTracing span creation in handler (extract/start span, set tags)
 - [ ] T031 [US1] Add child spans for service calls (instrument business logic)

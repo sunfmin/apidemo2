@@ -25,6 +25,8 @@
 **Protocol Buffers**: protoc compiler, protoc-gen-go for API contracts  
 **Testing**: Standard library `testing` with `httptest`, testcontainers-go for PostgreSQL (MANDATORY per constitution)  
 **Test Comparison**: google/go-cmp with protocmp for protobuf assertions  
+**Error Handling**: Standard library fmt.Errorf with %w verb for error wrapping, errors.Is/As for checking (MANDATORY per constitution)  
+**Context Propagation**: All service methods MUST accept context.Context as first parameter (MANDATORY per constitution)  
 **Target Platform**: [e.g., Linux server, containerized deployment or NEEDS CLARIFICATION]  
 **Project Type**: [single/web/mobile - determines source structure]  
 **Performance Goals**: [domain-specific, e.g., 1000 req/s, p99 < 200ms or NEEDS CLARIFICATION]  
