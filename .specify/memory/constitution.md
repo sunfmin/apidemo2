@@ -605,16 +605,54 @@ type productService struct {
     createHandler func(context.Context, *pb.ProductCreateRequest) (*pb.Product, error)  // Pre-built chain
 }
 
-// Constructor builds middleware chain ONCE
-func NewProductService(db *gorm.DB, middlewares ...CreateMiddleware) ProductService {
-    svc := &productService{db: db}
+// serviceBuilder provides fluent API for service configuration
+// Note: Unexported type - external apps don't need to know about it
+type serviceBuilder struct {
+    db                *gorm.DB
+    createMiddlewares []CreateMiddleware
+    logger            Logger
+    cache             Cache
+}
+
+// NewProductService creates a builder with REQUIRED parameters only
+// Returns unexported builder with exported methods for fluent API
+// Use With* methods to add optional configuration, then call Build()
+func NewProductService(db *gorm.DB) *serviceBuilder {
+    return &serviceBuilder{db: db}
+}
+
+// WithCreateMiddleware adds middleware to Create operation (chainable)
+func (b *serviceBuilder) WithCreateMiddleware(mw CreateMiddleware) *serviceBuilder {
+    b.createMiddlewares = append(b.createMiddlewares, mw)
+    return b  // Return builder for chaining
+}
+
+// WithLogger sets optional logger (chainable)
+func (b *serviceBuilder) WithLogger(logger Logger) *serviceBuilder {
+    b.logger = logger
+    return b
+}
+
+// WithCache sets optional cache (chainable)
+func (b *serviceBuilder) WithCache(cache Cache) *serviceBuilder {
+    b.cache = cache
+    return b
+}
+
+// Build constructs the service and builds middleware chain ONCE
+func (b *serviceBuilder) Build() ProductService {
+    svc := &productService{
+        db:     b.db,
+        logger: b.logger,
+        cache:  b.cache,
+    }
     
-    // Build middleware chain once in constructor (not on every call!)
+    // Build middleware chain once (not on every call!)
     handler := svc.coreCreate
     
     // Wrap with middleware (reverse order for correct execution)
-    for i := len(middlewares) - 1; i >= 0; i-- {
-        mw := middlewares[i]
+    for i := len(b.createMiddlewares) - 1; i >= 0; i-- {
+        mw := b.createMiddlewares[i]
         next := handler
         handler = func(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
             return mw(ctx, req, next)
@@ -713,13 +751,14 @@ func main() {
         return product, err
     }
     
-    // Create service with middleware chain
-    productSvc := services.NewProductService(
-        db,
-        validateSKU,   // First: validate
-        auditLog,      // Second: audit
-        notifySlack,   // Third: notify
-    )
+    // Create service with fluent API (chainable configuration)
+    productSvc := services.NewProductService(db).  // Required params only
+        WithCreateMiddleware(validateSKU).         // Optional: validation
+        WithCreateMiddleware(auditLog).            // Optional: audit
+        WithCreateMiddleware(notifySlack).         // Optional: notification
+        WithLogger(logger).                        // Optional: logger
+        WithCache(cache).                          // Optional: cache
+        Build()                                    // Builds middleware chain ONCE
     
     // Use normally - middleware chain executes automatically
     product, err := productSvc.Create(ctx, &pb.ProductCreateRequest{
@@ -757,16 +796,39 @@ func main() {
 ```
 
 **Middleware Design Best Practices**:
+- ✅ **Builder Pattern**: Constructor takes REQUIRED params, With* methods for OPTIONAL params
+- ✅ **Fluent API**: With* methods return builder for chaining
+- ✅ **Build once**: Build() method constructs service and middleware chain
 - ✅ Export middleware function type with clear documentation
 - ✅ Middleware receives `next` function to call core logic
 - ✅ Middleware can decide whether to call `next` (abort if needed)
-- ✅ Use variadic parameters for middleware list
-- ✅ Chain middleware in correct order (first in list executes first)
+- ✅ Chain middleware in correct order (first added executes first)
 - ✅ Document execution order clearly
 - ✅ Pass protobuf types (never internal models)
 - ✅ Provide example middleware for common use cases
 - ❌ Don't expose internal service state
-- ❌ Don't break service encapsulation
+- ❌ Don't rebuild middleware chain on every method call (inefficient)
+
+**Builder Pattern Benefits**:
+```go
+// ✅ GOOD: Clear required vs optional
+svc := services.NewProductService(db).  // Required: db
+    WithCreateMiddleware(validate).      // Optional
+    WithLogger(logger).                  // Optional
+    Build()                              // Builds once
+
+// ✅ Also valid: No optional params
+svc := services.NewProductService(db).Build()  // Just required params
+
+// ✅ Builder type is unexported (implementation detail)
+// External apps don't need to reference serviceBuilder type - they just chain methods!
+
+// ✅ Self-documenting: Method names explain purpose
+// ✅ Chainable: Easy to add/remove options
+// ✅ Type-safe: Compiler ensures Build() is called
+// ✅ Backward compatible: Can add new With* methods without breaking existing code
+// ✅ Clean: Builder type is hidden (users don't see implementation)
+```
 
 **Common Middleware Use Cases**:
 - **Authorization**: Check permissions before allowing operation
