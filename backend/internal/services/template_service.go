@@ -35,6 +35,13 @@ func NewTemplateService(db *gorm.DB) TemplateService {
 
 // Create creates a new product template
 func (s *templateService) Create(ctx context.Context, req *pb.CreateTemplateRequest) (*pb.ProductTemplate, error) {
+	// Check context cancellation before starting (Principle X)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	// Validate request
 	if err := s.validateCreateRequest(req); err != nil {
 		return nil, err
@@ -67,7 +74,7 @@ func (s *templateService) Create(ctx context.Context, req *pb.CreateTemplateRequ
 // Get retrieves a template by ID
 func (s *templateService) Get(ctx context.Context, id string) (*pb.ProductTemplate, error) {
 	if id == "" {
-		return nil, errors.New("template ID is required")
+		return nil, fmt.Errorf("template ID: %w", ErrMissingRequired)
 	}
 
 	var template models.ProductTemplate
@@ -156,7 +163,7 @@ func (s *templateService) List(ctx context.Context, req *pb.ListTemplatesRequest
 // Update updates an existing template
 func (s *templateService) Update(ctx context.Context, req *pb.UpdateTemplateRequest) (*pb.ProductTemplate, error) {
 	if req.Id == "" {
-		return nil, errors.New("template ID is required")
+		return nil, fmt.Errorf("template ID: %w", ErrMissingRequired)
 	}
 
 	// Get existing template
@@ -195,7 +202,7 @@ func (s *templateService) Update(ctx context.Context, req *pb.UpdateTemplateRequ
 // Delete deletes a template
 func (s *templateService) Delete(ctx context.Context, id string) error {
 	if id == "" {
-		return errors.New("template ID is required")
+		return fmt.Errorf("template ID: %w", ErrMissingRequired)
 	}
 
 	// Check if template exists
@@ -222,15 +229,15 @@ func (s *templateService) Delete(ctx context.Context, id string) error {
 
 func (s *templateService) validateCreateRequest(req *pb.CreateTemplateRequest) error {
 	if strings.TrimSpace(req.Name) == "" {
-		return errors.New("template name is required")
+		return fmt.Errorf("template name: %w", ErrMissingRequired)
 	}
 
 	if len(req.Name) > 255 {
-		return errors.New("template name must be 255 characters or less")
+		return fmt.Errorf("template name length %d: %w", len(req.Name), ErrValueOutOfRange)
 	}
 
 	if len(req.Attributes) == 0 {
-		return errors.New("at least one attribute is required")
+		return fmt.Errorf("at least one attribute: %w", ErrMissingRequired)
 	}
 
 	// Validate attributes
@@ -238,23 +245,23 @@ func (s *templateService) validateCreateRequest(req *pb.CreateTemplateRequest) e
 	for _, attr := range req.Attributes {
 		// Check attribute name
 		if attr.Name == "" {
-			return errors.New("attribute name is required")
+			return fmt.Errorf("attribute name: %w", ErrMissingRequired)
 		}
 
 		// Check for duplicate names
 		if attrNames[attr.Name] {
-			return fmt.Errorf("duplicate attribute name: %s", attr.Name)
+			return fmt.Errorf("duplicate attribute name '%s': %w", attr.Name, ErrInvalidRequest)
 		}
 		attrNames[attr.Name] = true
 
 		// Check attribute type
 		if attr.Type == pb.AttributeType_ATTRIBUTE_TYPE_UNSPECIFIED {
-			return fmt.Errorf("invalid attribute type for '%s'", attr.Name)
+			return fmt.Errorf("attribute '%s' type: %w", attr.Name, ErrInvalidType)
 		}
 
 		// Check list options
 		if attr.Type == pb.AttributeType_ATTRIBUTE_TYPE_LIST && len(attr.Options) == 0 {
-			return fmt.Errorf("list attribute '%s' must have at least one option", attr.Name)
+			return fmt.Errorf("list attribute '%s' options: %w", attr.Name, ErrMissingRequired)
 		}
 	}
 

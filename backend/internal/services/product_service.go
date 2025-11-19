@@ -37,6 +37,13 @@ func NewProductService(db *gorm.DB) ProductService {
 
 // Create creates a new product
 func (s *productService) Create(ctx context.Context, req *pb.CreateProductRequest) (*pb.Product, error) {
+	// Check context cancellation before starting (Principle X)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	// Verify template exists and load it FIRST (before validation)
 	var template models.ProductTemplate
 	if err := s.db.WithContext(ctx).First(&template, "id = ?", req.TemplateId).Error; err != nil {
@@ -70,6 +77,13 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 		Description:     req.Description,
 		AttributeValues: attrJSON,
 		Status:          s.protoStatusToString(req.Status),
+	}
+
+	// Check context before expensive operation (Principle X)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
 
 	// Use transaction to create product, pricing, and inventory atomically
@@ -130,7 +144,7 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 // Get retrieves a product by ID
 func (s *productService) Get(ctx context.Context, req *pb.GetProductRequest) (*pb.GetProductResponse, error) {
 	if req.Id == "" {
-		return nil, errors.New("product ID is required")
+		return nil, fmt.Errorf("product ID: %w", ErrMissingRequired)
 	}
 
 	var product models.Product
@@ -243,7 +257,7 @@ func (s *productService) List(ctx context.Context, req *pb.ListProductsRequest) 
 // Update updates an existing product
 func (s *productService) Update(ctx context.Context, req *pb.UpdateProductRequest) (*pb.Product, error) {
 	if req.Id == "" {
-		return nil, errors.New("product ID is required")
+		return nil, fmt.Errorf("product ID: %w", ErrMissingRequired)
 	}
 
 	// Load existing product
@@ -311,7 +325,7 @@ func (s *productService) Update(ctx context.Context, req *pb.UpdateProductReques
 // Delete deletes a product and its associated pricing, inventory, and optionally variants
 func (s *productService) Delete(ctx context.Context, req *pb.DeleteProductRequest) (*pb.DeleteProductResponse, error) {
 	if req.Id == "" {
-		return nil, errors.New("product ID is required")
+		return nil, fmt.Errorf("product ID: %w", ErrMissingRequired)
 	}
 
 	// Check if product exists
@@ -364,11 +378,11 @@ func (s *productService) Delete(ctx context.Context, req *pb.DeleteProductReques
 // BulkUpdateStatus updates status for multiple products
 func (s *productService) BulkUpdateStatus(ctx context.Context, req *pb.BulkUpdateStatusRequest) (*pb.BulkUpdateStatusResponse, error) {
 	if len(req.ProductIds) == 0 {
-		return nil, errors.New("product_ids cannot be empty")
+		return nil, fmt.Errorf("product_ids: %w", ErrMissingRequired)
 	}
 
 	if req.Status == pb.ProductStatus_PRODUCT_STATUS_UNSPECIFIED {
-		return nil, errors.New("status is required")
+		return nil, fmt.Errorf("status: %w", ErrMissingRequired)
 	}
 
 	status := s.protoStatusToString(req.Status)
@@ -410,43 +424,43 @@ func (s *productService) BulkUpdateStatus(ctx context.Context, req *pb.BulkUpdat
 // validateCreateRequest validates product creation request
 func (s *productService) validateCreateRequest(req *pb.CreateProductRequest) error {
 	if req.TemplateId == "" {
-		return errors.New("template_id is required")
+		return fmt.Errorf("template_id: %w", ErrMissingRequired)
 	}
 
 	if req.Name == "" {
-		return errors.New("product name is required")
+		return fmt.Errorf("product name: %w", ErrMissingRequired)
 	}
 
 	if len(req.Name) > 255 {
-		return errors.New("product name must be 255 characters or less")
+		return fmt.Errorf("product name length %d: %w", len(req.Name), ErrValueOutOfRange)
 	}
 
 	if req.Sku == "" {
-		return errors.New("SKU is required")
+		return fmt.Errorf("SKU: %w", ErrMissingRequired)
 	}
 
 	if len(req.Sku) > 100 {
-		return errors.New("SKU must be 100 characters or less")
+		return fmt.Errorf("SKU length %d: %w", len(req.Sku), ErrValueOutOfRange)
 	}
 
 	// Validate SKU format (alphanumeric, dash, underscore)
 	for _, char := range req.Sku {
 		if !(char >= 'a' && char <= 'z') && !(char >= 'A' && char <= 'Z') &&
 			!(char >= '0' && char <= '9') && char != '-' && char != '_' {
-			return fmt.Errorf("SKU contains invalid character: %c", char)
+			return fmt.Errorf("SKU contains invalid character '%c': %w", char, ErrInvalidSKU)
 		}
 	}
 
 	if req.InitialListPrice < 0 {
-		return errors.New("initial_list_price must be >= 0")
+		return fmt.Errorf("initial_list_price %.2f: %w", req.InitialListPrice, ErrValueOutOfRange)
 	}
 
 	if req.InitialSalePrice < 0 {
-		return errors.New("initial_sale_price must be >= 0")
+		return fmt.Errorf("initial_sale_price %.2f: %w", req.InitialSalePrice, ErrValueOutOfRange)
 	}
 
 	if req.InitialStock < 0 {
-		return errors.New("initial_stock must be >= 0")
+		return fmt.Errorf("initial_stock %d: %w", req.InitialStock, ErrValueOutOfRange)
 	}
 
 	return nil
@@ -470,7 +484,7 @@ func (s *productService) validateAttributeValues(values map[string]*pb.Attribute
 	for _, attr := range templateAttrs {
 		if attr.Required {
 			if _, ok := values[attr.Name]; !ok {
-				return fmt.Errorf("required attribute missing: %s", attr.Name)
+				return fmt.Errorf("required attribute '%s': %w", attr.Name, ErrMissingRequired)
 			}
 		}
 	}
@@ -479,12 +493,12 @@ func (s *productService) validateAttributeValues(values map[string]*pb.Attribute
 	for name, value := range values {
 		attrDef, ok := attrDefs[name]
 		if !ok {
-			return fmt.Errorf("attribute not defined in template: %s", name)
+			return fmt.Errorf("attribute '%s': %w", name, ErrInvalidRequest)
 		}
 
 		// Validate type matches
 		if value.Type != s.stringToAttributeType(attrDef.Type) {
-			return fmt.Errorf("attribute %s: expected type %s, got %s", name, attrDef.Type, value.Type.String())
+			return fmt.Errorf("attribute %s expected type %s got %s: %w", name, attrDef.Type, value.Type.String(), ErrInvalidType)
 		}
 
 		// For list type, validate values are in options
@@ -497,7 +511,7 @@ func (s *productService) validateAttributeValues(values map[string]*pb.Attribute
 
 				for _, val := range value.ListValue {
 					if !optionsSet[val] {
-						return fmt.Errorf("attribute %s: value '%s' not in allowed options", name, val)
+						return fmt.Errorf("attribute %s value '%s' not in allowed options: %w", name, val, ErrInvalidRequest)
 					}
 				}
 			}

@@ -161,6 +161,7 @@ func TestProductHandler_Create(t *testing.T) {
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Safe Text"},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
 				},
+				Status: pb.ProductStatus_PRODUCT_STATUS_DRAFT,
 			},
 			expectedStatus: http.StatusCreated, // Should be sanitized/escaped, not rejected
 			expectError:    false,
@@ -178,6 +179,7 @@ func TestProductHandler_Create(t *testing.T) {
 					"Product Name": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Test"},
 					"Color":        {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Black"}},
 				},
+				Status: pb.ProductStatus_PRODUCT_STATUS_DRAFT,
 			},
 			expectedStatus: http.StatusCreated, // Should be stored safely, not rejected
 			expectError:    false,

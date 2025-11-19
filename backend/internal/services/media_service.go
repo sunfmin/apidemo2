@@ -57,7 +57,7 @@ func NewMediaService(db *gorm.DB, storage MediaStorage, imageProcessor *ImagePro
 func (s *mediaService) Upload(ctx context.Context, entityType, entityID, attributeName string, file multipart.File, header *multipart.FileHeader) (*pb.MediaFile, error) {
 	// Validate entity type
 	if entityType != "product" && entityType != "variant" {
-		return nil, errors.New("entity_type must be 'product' or 'variant'")
+		return nil, fmt.Errorf("entity_type '%s': %w", entityType, ErrInvalidType)
 	}
 
 	// Verify entity exists
@@ -183,9 +183,9 @@ func (s *mediaService) Get(ctx context.Context, id string) (*pb.MediaFile, error
 	var mediaFile models.MediaFile
 	if err := s.db.WithContext(ctx).First(&mediaFile, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("media file not found: %s", id)
+			return nil, fmt.Errorf("get media file %s: %w", id, ErrMediaNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query media file %s: %w", id, err)
 	}
 
 	return s.modelToProto(ctx, &mediaFile), nil
@@ -221,15 +221,15 @@ func (s *mediaService) Update(ctx context.Context, id string, displayOrder *int3
 	var mediaFile models.MediaFile
 	if err := s.db.WithContext(ctx).First(&mediaFile, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("media file not found: %s", id)
+			return nil, fmt.Errorf("get media file %s: %w", id, ErrMediaNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query media file %s: %w", id, err)
 	}
 
 	updates := make(map[string]interface{})
 	if displayOrder != nil {
 		if *displayOrder < 0 {
-			return nil, errors.New("display_order must be >= 0")
+			return nil, fmt.Errorf("display_order %d: %w", *displayOrder, ErrValueOutOfRange)
 		}
 		updates["display_order"] = *displayOrder
 	}
@@ -291,14 +291,14 @@ func (s *mediaService) Delete(ctx context.Context, id string) error {
 // Reorder reorders media files
 func (s *mediaService) Reorder(ctx context.Context, entityType, entityID, attributeName string, mediaIDs []string) ([]*pb.MediaFile, error) {
 	if len(mediaIDs) == 0 {
-		return nil, errors.New("media_ids cannot be empty")
+		return nil, fmt.Errorf("media_ids: %w", ErrMissingRequired)
 	}
 
 	// Check for duplicates
 	seen := make(map[string]bool)
 	for _, id := range mediaIDs {
 		if seen[id] {
-			return nil, fmt.Errorf("duplicate media ID: %s", id)
+			return nil, fmt.Errorf("duplicate media ID '%s': %w", id, ErrAlreadyExists)
 		}
 		seen[id] = true
 	}
@@ -312,7 +312,7 @@ func (s *mediaService) Reorder(ctx context.Context, entityType, entityID, attrib
 	}
 
 	if len(mediaFiles) != len(mediaIDs) {
-		return nil, errors.New("some media IDs are invalid or don't belong to the specified entity/attribute")
+		return nil, fmt.Errorf("some media IDs invalid or mismatched: %w", ErrInvalidRequest)
 	}
 
 	// Update display order in transaction
@@ -408,7 +408,7 @@ func (s *mediaService) validateFileSize(size int64, fileType string) error {
 		return fmt.Errorf("video file size exceeds maximum of %d bytes", MaxVideoSize)
 	}
 	if size == 0 {
-		return errors.New("file is empty")
+		return fmt.Errorf("file size 0: %w", ErrInvalidRequest)
 	}
 	return nil
 }

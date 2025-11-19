@@ -299,6 +299,8 @@ func HandleServiceError(w http.ResponseWriter, err error) {
 		RespondWithErrorMessage(w, Errors.DuplicateSKU, err.Error())
 	case errors.Is(err, services.ErrDuplicateName):
 		RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
+	case errors.Is(err, services.ErrAlreadyExists):
+		RespondWithErrorMessage(w, Errors.AlreadyExists, err.Error())
 	case errors.Is(err, services.ErrInvalidSKU):
 		RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
 	case errors.Is(err, services.ErrMissingRequired):
@@ -311,9 +313,12 @@ func HandleServiceError(w http.ResponseWriter, err error) {
 		http.Error(w, "Request timeout", 504) // Gateway timeout
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		RespondWithErrorMessage(w, Errors.NotFound, err.Error())
+	case errors.Is(err, services.ErrValueOutOfRange):
+		RespondWithErrorMessage(w, Errors.ValueOutOfRange, err.Error())
+	case errors.Is(err, services.ErrInvalidType):
+		RespondWithErrorMessage(w, Errors.InvalidType, err.Error())
 	default:
-		// Catch-all for validation errors (fallback to string matching as last resort)
-		// Note: Services should use sentinel errors to avoid this
+		// True internal errors - don't expose details to client
 		RespondWithErrorMessage(w, Errors.InternalError, "Internal server error")
 	}
 }

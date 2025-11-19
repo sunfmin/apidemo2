@@ -36,6 +36,13 @@ func NewVariantService(db *gorm.DB) VariantService {
 
 // Create creates a new product variant
 func (s *variantService) Create(ctx context.Context, req *pb.CreateVariantRequest) (*pb.ProductVariant, error) {
+	// Check context cancellation before starting (Principle X)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	// Verify product exists and load it with template
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", req.ProductId).Error; err != nil {
@@ -271,10 +278,10 @@ func (s *variantService) Delete(ctx context.Context, id string) error {
 func (s *variantService) BulkCreate(ctx context.Context, req *pb.BulkCreateVariantsRequest) (*pb.BulkCreateVariantsResponse, error) {
 	// Validate request
 	if req.ProductId == "" {
-		return nil, errors.New("product_id is required")
+		return nil, fmt.Errorf("product_id: %w", ErrMissingRequired)
 	}
 	if len(req.Variants) == 0 {
-		return nil, errors.New("at least one variant is required")
+		return nil, fmt.Errorf("variants array: %w", ErrMissingRequired)
 	}
 
 	// Verify product exists and load template
@@ -425,16 +432,16 @@ func (s *variantService) BulkCreate(ctx context.Context, req *pb.BulkCreateVaria
 // validateVariantInput validates a single variant input for bulk creation
 func (s *variantService) validateVariantInput(input *pb.VariantInput, index int, skusSeen map[string]int) error {
 	if input.Name == "" {
-		return errors.New("variant name is required")
+		return fmt.Errorf("variant name: %w", ErrMissingRequired)
 	}
 	if len(input.Name) > 255 {
-		return errors.New("variant name must be 255 characters or less")
+		return fmt.Errorf("variant name length %d: %w", len(input.Name), ErrValueOutOfRange)
 	}
 	if input.Sku == "" {
-		return errors.New("SKU is required")
+		return fmt.Errorf("SKU: %w", ErrMissingRequired)
 	}
 	if len(input.Sku) > 100 {
-		return errors.New("SKU must be 100 characters or less")
+		return fmt.Errorf("SKU length %d: %w", len(input.Sku), ErrValueOutOfRange)
 	}
 
 	// Validate SKU format (alphanumeric, dash, underscore)
@@ -457,35 +464,35 @@ func (s *variantService) validateVariantInput(input *pb.VariantInput, index int,
 // validateCreateRequest validates variant creation request
 func (s *variantService) validateCreateRequest(req *pb.CreateVariantRequest) error {
 	if req.ProductId == "" {
-		return errors.New("product_id is required")
+		return fmt.Errorf("product_id: %w", ErrMissingRequired)
 	}
 	if req.Name == "" {
-		return errors.New("variant name is required")
+		return fmt.Errorf("variant name: %w", ErrMissingRequired)
 	}
 	if len(req.Name) > 255 {
-		return errors.New("variant name must be 255 characters or less")
+		return fmt.Errorf("variant name length %d: %w", len(req.Name), ErrValueOutOfRange)
 	}
 	if req.Sku == "" {
-		return errors.New("SKU is required")
+		return fmt.Errorf("SKU: %w", ErrMissingRequired)
 	}
 	if len(req.Sku) > 100 {
-		return errors.New("SKU must be 100 characters or less")
+		return fmt.Errorf("SKU length %d: %w", len(req.Sku), ErrValueOutOfRange)
 	}
 
 	// Validate SKU format (alphanumeric, dash, underscore)
 	for _, char := range req.Sku {
 		if !(char >= 'a' && char <= 'z') && !(char >= 'A' && char <= 'Z') &&
 			!(char >= '0' && char <= '9') && char != '-' && char != '_' {
-			return fmt.Errorf("SKU contains invalid character: %c", char)
+			return fmt.Errorf("SKU contains invalid character '%c': %w", char, ErrInvalidSKU)
 		}
 	}
 
 	if req.InitialPrice < 0 {
-		return errors.New("initial_price must be >= 0")
+		return fmt.Errorf("initial_price %.2f: %w", req.InitialPrice, ErrValueOutOfRange)
 	}
 
 	if req.InitialStock < 0 {
-		return errors.New("initial_stock must be >= 0")
+		return fmt.Errorf("initial_stock %d: %w", req.InitialStock, ErrValueOutOfRange)
 	}
 
 	return nil
@@ -515,13 +522,13 @@ func (s *variantService) validateAttributeOverrides(values map[string]*pb.Attrib
 		// Check if attribute exists in template
 		attrDef, ok := attrDefs[name]
 		if !ok {
-			return fmt.Errorf("attribute not defined in template: %s", name)
+			return fmt.Errorf("attribute '%s': %w", name, ErrInvalidRequest)
 		}
 
 		// Validate type matches
 		expectedType := s.stringToAttributeType(attrDef.Type)
 		if value.Type != expectedType {
-			return fmt.Errorf("attribute %s: expected type %s, got %s", name, attrDef.Type, value.Type.String())
+			return fmt.Errorf("attribute %s expected type %s got %s: %w", name, attrDef.Type, value.Type.String(), ErrInvalidType)
 		}
 
 		// For list type, validate values are in options
@@ -534,7 +541,7 @@ func (s *variantService) validateAttributeOverrides(values map[string]*pb.Attrib
 
 				for _, val := range value.ListValue {
 					if !optionsSet[val] {
-						return fmt.Errorf("attribute %s: value '%s' not in allowed options", name, val)
+						return fmt.Errorf("attribute %s value '%s' not in allowed options: %w", name, val, ErrInvalidRequest)
 					}
 				}
 			}
