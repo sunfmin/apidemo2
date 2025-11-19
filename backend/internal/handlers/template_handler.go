@@ -43,21 +43,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.message", err.Error())
-
-		// Determine error type based on error message
-		if strings.Contains(err.Error(), "already exists") {
-			RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
-			return
-		}
-		if strings.Contains(err.Error(), "required") ||
-			strings.Contains(err.Error(), "invalid") ||
-			strings.Contains(err.Error(), "must") ||
-			strings.Contains(err.Error(), "duplicate") {
-			RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
-			return
-		}
-
-		RespondWithErrorMessage(w, Errors.InternalError, "Failed to create template")
+		HandleServiceError(w, err)
 		return
 	}
 
@@ -85,13 +71,7 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.message", err.Error())
-
-		if strings.Contains(err.Error(), "not found") {
-			RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
-			return
-		}
-
-		RespondWithErrorMessage(w, Errors.InternalError, "Failed to get template")
+		HandleServiceError(w, err)
 		return
 	}
 
@@ -179,24 +159,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.message", err.Error())
-
-		if strings.Contains(err.Error(), "not found") {
-			RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
-			return
-		}
-		if strings.Contains(err.Error(), "already exists") {
-			RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
-			return
-		}
-		if strings.Contains(err.Error(), "required") ||
-			strings.Contains(err.Error(), "invalid") ||
-			strings.Contains(err.Error(), "must") ||
-			strings.Contains(err.Error(), "duplicate") {
-			RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
-			return
-		}
-
-		RespondWithErrorMessage(w, Errors.InternalError, "Failed to update template")
+		HandleServiceError(w, err)
 		return
 	}
 
@@ -224,17 +187,7 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		span.SetTag("error", true)
 		span.SetTag("error.message", err.Error())
-
-		if strings.Contains(err.Error(), "not found") {
-			RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
-			return
-		}
-		if strings.Contains(err.Error(), "has products") {
-			RespondWithErrorMessage(w, Errors.Conflict, err.Error())
-			return
-		}
-
-		RespondWithErrorMessage(w, Errors.InternalError, "Failed to delete template")
+		HandleServiceError(w, err)
 		return
 	}
 

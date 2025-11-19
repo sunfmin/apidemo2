@@ -40,19 +40,19 @@ func (s *variantService) Create(ctx context.Context, req *pb.CreateVariantReques
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", req.ProductId).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("product not found: %s", req.ProductId)
+			return nil, fmt.Errorf("get product %s: %w", req.ProductId, ErrProductNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query product %s with template: %w", req.ProductId, err)
 	}
 
 	// Validate request
 	if err := s.validateCreateRequest(req); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate create variant request: %w", err)
 	}
 
 	// Validate attribute overrides against template
 	if err := s.validateAttributeOverrides(req.AttributeValues, product.Template.Attributes); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate attribute overrides for variant: %w", err)
 	}
 
 	// Convert attribute overrides to JSON
@@ -76,9 +76,9 @@ func (s *variantService) Create(ctx context.Context, req *pb.CreateVariantReques
 	// Save variant
 	if err := tx.Create(variant).Error; err != nil {
 		if strings.Contains(err.Error(), "duplicate key") && strings.Contains(err.Error(), "sku") {
-			return nil, fmt.Errorf("SKU already exists: %s", req.Sku)
+			return nil, fmt.Errorf("create variant with SKU %s: %w", req.Sku, ErrDuplicateSKU)
 		}
-		return nil, err
+		return nil, fmt.Errorf("create variant in database (name=%s, sku=%s): %w", req.Name, req.Sku, err)
 	}
 
 	// Create variant pricing
@@ -102,7 +102,7 @@ func (s *variantService) Create(ctx context.Context, req *pb.CreateVariantReques
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("commit variant creation transaction (sku=%s): %w", req.Sku, err)
 	}
 
 	// Load variant with pricing and inventory
@@ -121,15 +121,15 @@ func (s *variantService) Get(ctx context.Context, id string) (*pb.ProductVariant
 		Preload("Inventories").
 		First(&variant, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("variant not found: %s", id)
+			return nil, fmt.Errorf("get variant %s: %w", id, ErrVariantNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query variant %s: %w", id, err)
 	}
 
 	// Load parent product with template for attribute merging
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", variant.ProductID).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query parent product %s: %w", variant.ProductID, err)
 	}
 
 	return s.modelToProto(&variant, &product)
@@ -141,9 +141,9 @@ func (s *variantService) List(ctx context.Context, productID string) ([]*pb.Prod
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", productID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("product not found: %s", productID)
+			return nil, fmt.Errorf("get product %s: %w", productID, ErrProductNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query product %s with template: %w", productID, err)
 	}
 
 	// Load variants
@@ -154,7 +154,7 @@ func (s *variantService) List(ctx context.Context, productID string) ([]*pb.Prod
 		Where("product_id = ?", productID).
 		Order("created_at DESC").
 		Find(&variants).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query variants for product %s: %w", productID, err)
 	}
 
 	// Convert to protobuf
@@ -162,7 +162,7 @@ func (s *variantService) List(ctx context.Context, productID string) ([]*pb.Prod
 	for _, variant := range variants {
 		pbVariant, err := s.modelToProto(&variant, &product)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("convert variant %s to proto: %w", variant.ID, err)
 		}
 		pbVariants = append(pbVariants, pbVariant)
 	}
@@ -176,15 +176,15 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 	var variant models.ProductVariant
 	if err := s.db.WithContext(ctx).First(&variant, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("variant not found: %s", req.Id)
+			return nil, fmt.Errorf("get variant %s: %w", req.Id, ErrVariantNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query variant %s: %w", req.Id, err)
 	}
 
 	// Load parent product with template for validation
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", variant.ProductID).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query parent product %s: %w", variant.ProductID, err)
 	}
 
 	// Update fields
@@ -198,12 +198,12 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 	if len(req.AttributeValues) > 0 {
 		// Validate attribute overrides against template
 		if err := s.validateAttributeOverrides(req.AttributeValues, product.Template.Attributes); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validate attribute overrides: %w", err)
 		}
 
 		attrJSON, err := s.protoAttributesToJSON(req.AttributeValues)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("serialize attribute overrides: %w", err)
 		}
 		updates["attribute_values"] = attrJSON
 	}
@@ -212,9 +212,9 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 	if len(updates) > 0 {
 		if err := s.db.WithContext(ctx).Model(&variant).Updates(updates).Error; err != nil {
 			if strings.Contains(err.Error(), "duplicate key") {
-				return nil, fmt.Errorf("SKU already exists: %s", req.Sku)
+				return nil, fmt.Errorf("update variant %s with SKU %s: %w", req.Id, req.Sku, ErrDuplicateSKU)
 			}
-			return nil, err
+			return nil, fmt.Errorf("update variant %s: %w", req.Id, err)
 		}
 	}
 
@@ -223,7 +223,7 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 		Preload("Pricing").
 		Preload("Inventories").
 		First(&variant, "id = ?", req.Id).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reload variant %s after update: %w", req.Id, err)
 	}
 
 	// Product is already loaded with Template from earlier, use it for conversion
@@ -236,9 +236,9 @@ func (s *variantService) Delete(ctx context.Context, id string) error {
 	var variant models.ProductVariant
 	if err := s.db.WithContext(ctx).First(&variant, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("variant not found: %s", id)
+			return fmt.Errorf("get variant %s: %w", id, ErrVariantNotFound)
 		}
-		return err
+		return fmt.Errorf("query variant %s: %w", id, err)
 	}
 
 	// Use transaction to delete variant, pricing, and inventory
@@ -257,10 +257,14 @@ func (s *variantService) Delete(ctx context.Context, id string) error {
 
 	// Delete variant
 	if err := tx.Delete(&variant).Error; err != nil {
-		return err
+		return fmt.Errorf("delete variant %s: %w", id, err)
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("commit variant deletion (id=%s): %w", id, err)
+	}
+
+	return nil
 }
 
 // BulkCreate creates multiple variants at once with transaction support
@@ -277,9 +281,9 @@ func (s *variantService) BulkCreate(ctx context.Context, req *pb.BulkCreateVaria
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", req.ProductId).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("product not found: %s", req.ProductId)
+			return nil, fmt.Errorf("get product %s: %w", req.ProductId, ErrProductNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query product %s with template: %w", req.ProductId, err)
 	}
 
 	response := &pb.BulkCreateVariantsResponse{

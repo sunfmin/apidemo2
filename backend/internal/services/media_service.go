@@ -76,7 +76,7 @@ func (s *mediaService) Upload(ctx context.Context, entityType, entityID, attribu
 
 	// Validate file size
 	if err := s.validateFileSize(header.Size, fileType); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate file size for %s: %w", header.Filename, err)
 	}
 
 	// Store the file using the storage interface
@@ -205,7 +205,7 @@ func (s *mediaService) List(ctx context.Context, entityType, entityID, attribute
 
 	var mediaFiles []models.MediaFile
 	if err := query.Order("display_order ASC, created_at ASC").Find(&mediaFiles).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query media files for %s %s: %w", entityType, entityID, err)
 	}
 
 	pbFiles := make([]*pb.MediaFile, 0, len(mediaFiles))
@@ -256,9 +256,9 @@ func (s *mediaService) Delete(ctx context.Context, id string) error {
 	var mediaFile models.MediaFile
 	if err := s.db.WithContext(ctx).First(&mediaFile, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("media file not found: %s", id)
+			return fmt.Errorf("get media file %s: %w", id, ErrMediaNotFound)
 		}
-		return err
+		return fmt.Errorf("query media file %s: %w", id, err)
 	}
 
 	// Delete from storage
@@ -321,12 +321,12 @@ func (s *mediaService) Reorder(ctx context.Context, entityType, entityID, attrib
 
 	for i, id := range mediaIDs {
 		if err := tx.Model(&models.MediaFile{}).Where("id = ?", id).Update("display_order", i).Error; err != nil {
-			return nil, err
+			return nil, fmt.Errorf("update display order for media %s: %w", id, err)
 		}
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("commit media reorder transaction: %w", err)
 	}
 
 	// Reload and return
@@ -340,17 +340,17 @@ func (s *mediaService) verifyEntity(ctx context.Context, entityType, entityID st
 		var product models.Product
 		if err := s.db.WithContext(ctx).First(&product, "id = ?", entityID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("product not found: %s", entityID)
+				return fmt.Errorf("verify product %s: %w", entityID, ErrProductNotFound)
 			}
-			return err
+			return fmt.Errorf("query product %s: %w", entityID, err)
 		}
 	} else if entityType == "variant" {
 		var variant models.ProductVariant
 		if err := s.db.WithContext(ctx).First(&variant, "id = ?", entityID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return fmt.Errorf("variant not found: %s", entityID)
+				return fmt.Errorf("verify variant %s: %w", entityID, ErrVariantNotFound)
 			}
-			return err
+			return fmt.Errorf("query variant %s: %w", entityID, err)
 		}
 	}
 	return nil

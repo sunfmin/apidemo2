@@ -41,9 +41,9 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 	var template models.ProductTemplate
 	if err := s.db.WithContext(ctx).First(&template, "id = ?", req.TemplateId).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("template not found: %s", req.TemplateId)
+			return nil, fmt.Errorf("get template %s: %w", req.TemplateId, ErrTemplateNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query template %s: %w", req.TemplateId, err)
 	}
 
 	// Validate request (after template is confirmed to exist)
@@ -79,9 +79,9 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 	// Save product (master data)
 	if err := tx.Create(product).Error; err != nil {
 		if strings.Contains(err.Error(), "duplicate key") && strings.Contains(err.Error(), "sku") {
-			return nil, fmt.Errorf("SKU already exists: %s", req.Sku)
+			return nil, fmt.Errorf("create product with SKU %s: %w", req.Sku, ErrDuplicateSKU)
 		}
-		return nil, err
+		return nil, fmt.Errorf("create product in database (name=%s, sku=%s): %w", req.Name, req.Sku, err)
 	}
 
 	// Create pricing record (Marketing domain)
@@ -116,7 +116,7 @@ func (s *productService) Create(ctx context.Context, req *pb.CreateProductReques
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("commit product creation transaction (sku=%s): %w", req.Sku, err)
 	}
 
 	// Load product with pricing and inventory for response
@@ -138,9 +138,9 @@ func (s *productService) Get(ctx context.Context, req *pb.GetProductRequest) (*p
 
 	if err := query.First(&product, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("product not found: %s", req.Id)
+			return nil, fmt.Errorf("get product %s: %w", req.Id, ErrProductNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query product %s: %w", req.Id, err)
 	}
 
 	response := &pb.GetProductResponse{
@@ -182,7 +182,7 @@ func (s *productService) List(ctx context.Context, req *pb.ListProductsRequest) 
 	// Count total
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("count products: %w", err)
 	}
 
 	// Apply sorting
@@ -215,7 +215,7 @@ func (s *productService) List(ctx context.Context, req *pb.ListProductsRequest) 
 	// Execute query
 	var products []models.Product
 	if err := query.Find(&products).Error; err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("query products: %w", err)
 	}
 
 	// Convert to protobuf
@@ -223,7 +223,7 @@ func (s *productService) List(ctx context.Context, req *pb.ListProductsRequest) 
 	for i := range products {
 		pbProduct, err := s.modelToProto(&products[i], products[i].Template.Name)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("convert product %s to proto: %w", products[i].ID, err)
 		}
 		pbProducts = append(pbProducts, pbProduct)
 	}
@@ -250,9 +250,9 @@ func (s *productService) Update(ctx context.Context, req *pb.UpdateProductReques
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("product not found: %s", req.Id)
+			return nil, fmt.Errorf("get product %s: %w", req.Id, ErrProductNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query product %s: %w", req.Id, err)
 	}
 
 	// Update fields
@@ -294,15 +294,15 @@ func (s *productService) Update(ctx context.Context, req *pb.UpdateProductReques
 	if len(updates) > 0 {
 		if err := s.db.WithContext(ctx).Model(&product).Updates(updates).Error; err != nil {
 			if strings.Contains(err.Error(), "duplicate key") && strings.Contains(err.Error(), "sku") {
-				return nil, fmt.Errorf("SKU already exists: %s", req.Sku)
+				return nil, fmt.Errorf("update product %s with SKU %s: %w", req.Id, req.Sku, ErrDuplicateSKU)
 			}
-			return nil, err
+			return nil, fmt.Errorf("update product %s: %w", req.Id, err)
 		}
 	}
 
 	// Reload product
 	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", req.Id).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reload product %s after update: %w", req.Id, err)
 	}
 
 	return s.modelToProto(&product, product.Template.Name)
@@ -318,9 +318,9 @@ func (s *productService) Delete(ctx context.Context, req *pb.DeleteProductReques
 	var product models.Product
 	if err := s.db.WithContext(ctx).Preload("Variants").First(&product, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("product not found: %s", req.Id)
+			return nil, fmt.Errorf("get product %s: %w", req.Id, ErrProductNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("query product %s with variants: %w", req.Id, err)
 	}
 
 	// Use transaction to delete product, pricing, inventory, and variants atomically
@@ -348,11 +348,11 @@ func (s *productService) Delete(ctx context.Context, req *pb.DeleteProductReques
 
 	// Finally delete the product itself
 	if err := tx.Delete(&product).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("delete product %s: %w", req.Id, err)
 	}
 
 	if err := tx.Commit().Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("commit product deletion (id=%s): %w", req.Id, err)
 	}
 
 	return &pb.DeleteProductResponse{
@@ -380,7 +380,7 @@ func (s *productService) BulkUpdateStatus(ctx context.Context, req *pb.BulkUpdat
 		Update("status", status)
 
 	if result.Error != nil {
-		return nil, result.Error
+		return nil, fmt.Errorf("bulk update status to %s: %w", status, result.Error)
 	}
 
 	// Find failed IDs (products that don't exist)

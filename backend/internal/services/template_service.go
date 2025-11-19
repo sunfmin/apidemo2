@@ -55,9 +55,9 @@ func (s *templateService) Create(ctx context.Context, req *pb.CreateTemplateRequ
 	// Save to database
 	if err := s.db.WithContext(ctx).Create(template).Error; err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("template with name '%s' already exists", req.Name)
+			return nil, fmt.Errorf("create template with name '%s': %w", req.Name, ErrDuplicateName)
 		}
-		return nil, fmt.Errorf("failed to create template: %w", err)
+		return nil, fmt.Errorf("create template in database (name=%s): %w", req.Name, err)
 	}
 
 	// Convert to protobuf response
@@ -73,9 +73,9 @@ func (s *templateService) Get(ctx context.Context, id string) (*pb.ProductTempla
 	var template models.ProductTemplate
 	if err := s.db.WithContext(ctx).First(&template, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("template not found: %s", id)
+			return nil, fmt.Errorf("get template %s: %w", id, ErrTemplateNotFound)
 		}
-		return nil, fmt.Errorf("failed to get template: %w", err)
+		return nil, fmt.Errorf("query template %s: %w", id, err)
 	}
 
 	return s.modelToProto(&template), nil
@@ -163,9 +163,9 @@ func (s *templateService) Update(ctx context.Context, req *pb.UpdateTemplateRequ
 	var template models.ProductTemplate
 	if err := s.db.WithContext(ctx).First(&template, "id = ?", req.Id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("template not found: %s", req.Id)
+			return nil, fmt.Errorf("get template %s: %w", req.Id, ErrTemplateNotFound)
 		}
-		return nil, fmt.Errorf("failed to get template: %w", err)
+		return nil, fmt.Errorf("query template %s: %w", req.Id, err)
 	}
 
 	// Update fields
@@ -184,9 +184,9 @@ func (s *templateService) Update(ctx context.Context, req *pb.UpdateTemplateRequ
 	// Save changes
 	if err := s.db.WithContext(ctx).Save(&template).Error; err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			return nil, fmt.Errorf("template with name '%s' already exists", template.Name)
+			return nil, fmt.Errorf("update template %s with name '%s': %w", req.Id, template.Name, ErrDuplicateName)
 		}
-		return nil, fmt.Errorf("failed to update template: %w", err)
+		return nil, fmt.Errorf("update template %s: %w", req.Id, err)
 	}
 
 	return s.modelToProto(&template), nil
@@ -202,9 +202,9 @@ func (s *templateService) Delete(ctx context.Context, id string) error {
 	var template models.ProductTemplate
 	if err := s.db.WithContext(ctx).First(&template, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("template not found: %s", id)
+			return fmt.Errorf("get template %s: %w", id, ErrTemplateNotFound)
 		}
-		return fmt.Errorf("failed to get template: %w", err)
+		return fmt.Errorf("query template %s: %w", id, err)
 	}
 
 	// TODO: Check if template has products using it
@@ -212,7 +212,7 @@ func (s *templateService) Delete(ctx context.Context, id string) error {
 
 	// Delete template
 	if err := s.db.WithContext(ctx).Delete(&template).Error; err != nil {
-		return fmt.Errorf("failed to delete template: %w", err)
+		return fmt.Errorf("delete template %s: %w", id, err)
 	}
 
 	return nil

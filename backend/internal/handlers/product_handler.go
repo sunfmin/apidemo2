@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/opentracing/opentracing-go"
+	"gorm.io/gorm"
 
 	pb "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1"
 	"github.com/sunfmin/apidemo2/backend/internal/services"
@@ -280,35 +283,37 @@ func (h *ProductHandler) BulkUpdateStatus(w http.ResponseWriter, r *http.Request
 }
 
 // HandleServiceError converts service errors to appropriate HTTP responses using typed error codes
+// Uses errors.Is() and errors.As() for type-safe error checking (Principle XI)
 func HandleServiceError(w http.ResponseWriter, err error) {
-	errMsg := err.Error()
-
-	// Check for specific error patterns and use typed error codes
+	// Use errors.Is() to check for specific error types (works with wrapped errors)
 	switch {
-	case strings.Contains(errMsg, "template not found"):
-		RespondWithErrorMessage(w, Errors.TemplateNotFound, errMsg)
-	case strings.Contains(errMsg, "product not found"):
-		RespondWithErrorMessage(w, Errors.ProductNotFound, errMsg)
-	case strings.Contains(errMsg, "variant not found"):
-		RespondWithErrorMessage(w, Errors.VariantNotFound, errMsg)
-	case strings.Contains(errMsg, "media file not found"):
-		RespondWithErrorMessage(w, Errors.MediaNotFound, errMsg)
-	case strings.Contains(errMsg, "not found"), strings.Contains(errMsg, "record not found"):
-		RespondWithErrorMessage(w, Errors.NotFound, errMsg)
-	case strings.Contains(errMsg, "duplicate"), strings.Contains(errMsg, "SKU already"):
-		RespondWithErrorMessage(w, Errors.DuplicateSKU, errMsg)
-	case strings.Contains(errMsg, "already exists"):
-		RespondWithErrorMessage(w, Errors.Conflict, errMsg)
-	case strings.Contains(errMsg, "required"), 
-		strings.Contains(errMsg, "invalid"), 
-		strings.Contains(errMsg, "validation"), 
-		strings.Contains(errMsg, "must be"), 
-		strings.Contains(errMsg, "cannot be"), 
-		strings.Contains(errMsg, "not in allowed options"),
-		strings.Contains(errMsg, "attribute not defined"),
-		strings.Contains(errMsg, "expected type"):
-		RespondWithErrorMessage(w, Errors.ValidationFailed, errMsg)
+	case errors.Is(err, services.ErrTemplateNotFound):
+		RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
+	case errors.Is(err, services.ErrProductNotFound):
+		RespondWithErrorMessage(w, Errors.ProductNotFound, err.Error())
+	case errors.Is(err, services.ErrVariantNotFound):
+		RespondWithErrorMessage(w, Errors.VariantNotFound, err.Error())
+	case errors.Is(err, services.ErrMediaNotFound):
+		RespondWithErrorMessage(w, Errors.MediaNotFound, err.Error())
+	case errors.Is(err, services.ErrDuplicateSKU):
+		RespondWithErrorMessage(w, Errors.DuplicateSKU, err.Error())
+	case errors.Is(err, services.ErrDuplicateName):
+		RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
+	case errors.Is(err, services.ErrInvalidSKU):
+		RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
+	case errors.Is(err, services.ErrMissingRequired):
+		RespondWithErrorMessage(w, Errors.MissingRequired, err.Error())
+	case errors.Is(err, services.ErrInvalidRequest):
+		RespondWithErrorMessage(w, Errors.InvalidRequest, err.Error())
+	case errors.Is(err, context.Canceled):
+		http.Error(w, "Request cancelled", 499) // Client closed connection
+	case errors.Is(err, context.DeadlineExceeded):
+		http.Error(w, "Request timeout", 504) // Gateway timeout
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		RespondWithErrorMessage(w, Errors.NotFound, err.Error())
 	default:
-		RespondWithErrorMessage(w, Errors.InternalError, errMsg)
+		// Catch-all for validation errors (fallback to string matching as last resort)
+		// Note: Services should use sentinel errors to avoid this
+		RespondWithErrorMessage(w, Errors.InternalError, "Internal server error")
 	}
 }
