@@ -174,6 +174,54 @@ func TestVariantHandler_Create(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectError:    true,
 		},
+		{
+			name:      "invalid_attribute_not_in_template",
+			productID: product.ID,
+			request: &pb.CreateVariantRequest{
+				ProductId: product.ID,
+				Name:      "Invalid Attribute Variant",
+				Sku:       "VAR-INVALID-ATTR",
+				AttributeValues: map[string]*pb.AttributeValue{
+					"NonExistentAttribute": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Invalid"},
+				},
+				InitialPrice: 29.99,
+				InitialStock: 10,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+		{
+			name:      "invalid_attribute_type_mismatch",
+			productID: product.ID,
+			request: &pb.CreateVariantRequest{
+				ProductId: product.ID,
+				Name:      "Type Mismatch Variant",
+				Sku:       "VAR-TYPE-MISMATCH",
+				AttributeValues: map[string]*pb.AttributeValue{
+					"Size": {Type: pb.AttributeType_ATTRIBUTE_TYPE_TEXT, TextValue: "Wrong Type"}, // Should be LIST
+				},
+				InitialPrice: 29.99,
+				InitialStock: 10,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+		{
+			name:      "list_value_not_in_options",
+			productID: product.ID,
+			request: &pb.CreateVariantRequest{
+				ProductId: product.ID,
+				Name:      "Invalid List Value Variant",
+				Sku:       "VAR-INVALID-LIST",
+				AttributeValues: map[string]*pb.AttributeValue{
+					"Color": {Type: pb.AttributeType_ATTRIBUTE_TYPE_LIST, ListValue: []string{"Purple"}}, // Not in options
+				},
+				InitialPrice: 29.99,
+				InitialStock: 10,
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
 	}
 
 	for _, tc := range testCases {

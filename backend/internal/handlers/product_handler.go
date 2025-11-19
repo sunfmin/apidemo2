@@ -289,13 +289,24 @@ func HandleServiceError(w http.ResponseWriter, err error) {
 		RespondWithErrorMessage(w, Errors.TemplateNotFound, errMsg)
 	case strings.Contains(errMsg, "product not found"):
 		RespondWithErrorMessage(w, Errors.ProductNotFound, errMsg)
+	case strings.Contains(errMsg, "variant not found"):
+		RespondWithErrorMessage(w, Errors.VariantNotFound, errMsg)
+	case strings.Contains(errMsg, "media file not found"):
+		RespondWithErrorMessage(w, Errors.MediaNotFound, errMsg)
 	case strings.Contains(errMsg, "not found"), strings.Contains(errMsg, "record not found"):
 		RespondWithErrorMessage(w, Errors.NotFound, errMsg)
 	case strings.Contains(errMsg, "duplicate"), strings.Contains(errMsg, "SKU already"):
 		RespondWithErrorMessage(w, Errors.DuplicateSKU, errMsg)
 	case strings.Contains(errMsg, "already exists"):
 		RespondWithErrorMessage(w, Errors.Conflict, errMsg)
-	case strings.Contains(errMsg, "required"), strings.Contains(errMsg, "invalid"), strings.Contains(errMsg, "validation"), strings.Contains(errMsg, "must be"), strings.Contains(errMsg, "cannot be"), strings.Contains(errMsg, "not in allowed options"):
+	case strings.Contains(errMsg, "required"), 
+		strings.Contains(errMsg, "invalid"), 
+		strings.Contains(errMsg, "validation"), 
+		strings.Contains(errMsg, "must be"), 
+		strings.Contains(errMsg, "cannot be"), 
+		strings.Contains(errMsg, "not in allowed options"),
+		strings.Contains(errMsg, "attribute not defined"),
+		strings.Contains(errMsg, "expected type"):
 		RespondWithErrorMessage(w, Errors.ValidationFailed, errMsg)
 	default:
 		RespondWithErrorMessage(w, Errors.InternalError, errMsg)

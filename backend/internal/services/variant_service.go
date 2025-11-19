@@ -50,6 +50,11 @@ func (s *variantService) Create(ctx context.Context, req *pb.CreateVariantReques
 		return nil, err
 	}
 
+	// Validate attribute overrides against template
+	if err := s.validateAttributeOverrides(req.AttributeValues, product.Template.Attributes); err != nil {
+		return nil, err
+	}
+
 	// Convert attribute overrides to JSON
 	attrJSON, err := s.protoAttributesToJSON(req.AttributeValues)
 	if err != nil {
@@ -176,6 +181,12 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 		return nil, err
 	}
 
+	// Load parent product with template for validation
+	var product models.Product
+	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", variant.ProductID).Error; err != nil {
+		return nil, err
+	}
+
 	// Update fields
 	updates := make(map[string]interface{})
 	if req.Name != "" {
@@ -185,6 +196,11 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 		updates["sku"] = req.Sku
 	}
 	if len(req.AttributeValues) > 0 {
+		// Validate attribute overrides against template
+		if err := s.validateAttributeOverrides(req.AttributeValues, product.Template.Attributes); err != nil {
+			return nil, err
+		}
+
 		attrJSON, err := s.protoAttributesToJSON(req.AttributeValues)
 		if err != nil {
 			return nil, err
@@ -210,12 +226,7 @@ func (s *variantService) Update(ctx context.Context, req *pb.UpdateVariantReques
 		return nil, err
 	}
 
-	// Load parent product
-	var product models.Product
-	if err := s.db.WithContext(ctx).Preload("Template").First(&product, "id = ?", variant.ProductID).Error; err != nil {
-		return nil, err
-	}
-
+	// Product is already loaded with Template from earlier, use it for conversion
 	return s.modelToProto(&variant, &product)
 }
 
@@ -286,6 +297,16 @@ func (s *variantService) BulkCreate(ctx context.Context, req *pb.BulkCreateVaria
 	for i, variantInput := range req.Variants {
 		// Validate individual variant
 		if err := s.validateVariantInput(variantInput, i, skusSeen); err != nil {
+			response.Errors = append(response.Errors, &pb.BulkCreateError{
+				Index:        int32(i),
+				Sku:          variantInput.Sku,
+				ErrorMessage: err.Error(),
+			})
+			continue
+		}
+
+		// Validate attribute overrides against template
+		if err := s.validateAttributeOverrides(variantInput.AttributeValues, product.Template.Attributes); err != nil {
 			response.Errors = append(response.Errors, &pb.BulkCreateError{
 				Index:        int32(i),
 				Sku:          variantInput.Sku,
@@ -461,6 +482,59 @@ func (s *variantService) validateCreateRequest(req *pb.CreateVariantRequest) err
 
 	if req.InitialStock < 0 {
 		return errors.New("initial_stock must be >= 0")
+	}
+
+	return nil
+}
+
+// validateAttributeOverrides validates variant attribute overrides against template
+func (s *variantService) validateAttributeOverrides(values map[string]*pb.AttributeValue, templateAttrsJSON []byte) error {
+	// If no overrides, nothing to validate
+	if len(values) == 0 {
+		return nil
+	}
+
+	// Parse template attributes
+	var templateAttrs []models.AttributeDefinition
+	if err := json.Unmarshal(templateAttrsJSON, &templateAttrs); err != nil {
+		return fmt.Errorf("failed to parse template attributes: %w", err)
+	}
+
+	// Build attribute definition map
+	attrDefs := make(map[string]models.AttributeDefinition)
+	for _, attr := range templateAttrs {
+		attrDefs[attr.Name] = attr
+	}
+
+	// Validate each override
+	for name, value := range values {
+		// Check if attribute exists in template
+		attrDef, ok := attrDefs[name]
+		if !ok {
+			return fmt.Errorf("attribute not defined in template: %s", name)
+		}
+
+		// Validate type matches
+		expectedType := s.stringToAttributeType(attrDef.Type)
+		if value.Type != expectedType {
+			return fmt.Errorf("attribute %s: expected type %s, got %s", name, attrDef.Type, value.Type.String())
+		}
+
+		// For list type, validate values are in options
+		if attrDef.Type == "list" && len(attrDef.Options) > 0 {
+			if len(value.ListValue) > 0 {
+				optionsSet := make(map[string]bool)
+				for _, opt := range attrDef.Options {
+					optionsSet[opt] = true
+				}
+
+				for _, val := range value.ListValue {
+					if !optionsSet[val] {
+						return fmt.Errorf("attribute %s: value '%s' not in allowed options", name, val)
+					}
+				}
+			}
+		}
 	}
 
 	return nil
