@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	pb "github.com/sunfmin/apidemo2/backend/api/gen/pim/v1"
-	"github.com/sunfmin/apidemo2/backend/internal/services"
+	"github.com/sunfmin/apidemo2/backend/services"
 )
 
 // ProductHandler handles HTTP requests for products

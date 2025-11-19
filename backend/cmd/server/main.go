@@ -12,10 +12,10 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/sunfmin/apidemo2/backend/internal/handlers"
+	"github.com/sunfmin/apidemo2/backend/handlers"
 	"github.com/sunfmin/apidemo2/backend/internal/middleware"
 	"github.com/sunfmin/apidemo2/backend/internal/models"
-	"github.com/sunfmin/apidemo2/backend/internal/services"
+	"github.com/sunfmin/apidemo2/backend/services"
 )
 
 func main() {

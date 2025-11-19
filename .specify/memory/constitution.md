@@ -1,36 +1,18 @@
 <!--
 Sync Impact Report:
-- Version: 1.7.0 → 1.8.0 (MINOR bump - new principle added)
-- New principles added:
-  - XI. Error Wrapping and Propagation - All errors MUST be wrapped with context using standard library
-- Principle details:
-  - Use fmt.Errorf with %w verb to wrap errors and preserve error chains
-  - Add contextual information at each layer as errors propagate
-  - Use errors.Is() and errors.As() for error type checking (NOT string comparison)
-  - NEVER swallow errors without logging or returning them
-  - Service layer MUST add business context to errors
-  - HTTP layer MUST NOT expose internal error details to clients
-  - Tests MUST verify error wrapping and unwrapping with errors.Is()
+- Version: 1.8.0 → 1.8.1 (PATCH bump - clarify package structure for reusability)
+- Clarifications added:
+  - Principle VIII: Services MUST be in public packages (not internal/) for external reusability
+  - Models CAN stay in internal/ (services return protobuf, not models)
+  - Middleware STAYS in internal/ (app-specific implementation)
 - Rationale:
-  - Standard library error wrapping (since Go 1.13) provides error chains
-  - Adding context at each layer aids debugging without stack traces
-  - errors.Is/As enable proper error type checking across wrapped errors
-  - Stack traces NOT available in standard library (pkg/errors archived)
-  - Error context helps trace error origin and flow through layers
-- Impact:
-  - All error returns MUST wrap lower-level errors with fmt.Errorf("%w", err)
-  - Error messages MUST add contextual information (operation, parameters)
-  - Error checking MUST use errors.Is/As (not string matching or type assertions)
-  - Service methods MUST wrap errors with business context
-  - Tests MUST verify error chains with errors.Is()
-  - FIXED: Principle IX example updated to use errors.Is() (was using string comparison)
-- Templates requiring updates:
-  ✅ plan-template.md - error handling examples already show good patterns
-  ✅ spec-template.md - no changes needed
-  ✅ tasks-template.md - error handling already implied in service layer
-  ⚠️  No breaking changes - adding best practices guidance
-- Conflicts resolved:
-  ✅ Principle IX example now uses errors.Is() instead of strings.Contains() for consistency with Principle XI
+  - Go's internal/ visibility rules prevent cross-module imports
+  - Services return protobuf types (Principle VI), so models remain private
+  - Clear distinction between public API contract and internal implementation
+- Status:
+  ✅ Codebase refactored - services and handlers now in public packages
+  ✅ All tests passing after refactoring
+  ✅ Principle VIII fully compliant
 -->
 
 
@@ -354,13 +336,122 @@ Business logic MUST be separated from HTTP transport using service interfaces:
 - Services MUST be exported and usable as normal Go packages
 - Service interfaces MUST be defined in the same package as implementation
 - Multiple applications MUST be able to share the same service instances
+- **Services MUST NOT be in `internal/` packages** if they are intended for use by external Go applications
+- Handlers MAY be in `internal/` packages if they are application-specific and not meant for external use
+- Handlers CAN be in public packages if other applications want to embed or reuse them
+- Use `internal/` ONLY for code that is truly internal implementation details, not part of the public API
 
-**Rationale**: Separating business logic from HTTP transport enables code reuse across multiple contexts (HTTP APIs, gRPC services, CLI tools, background workers, embedded usage in other Go apps). Dependency injection allows applications to share expensive resources like database connection pools and caches. This architecture makes services testable without HTTP layer overhead and allows the package to be imported and used as a library in other Go applications.
+**Rationale**: Separating business logic from HTTP transport enables code reuse across multiple contexts (HTTP APIs, gRPC services, CLI tools, background workers, embedded usage in other Go apps). Dependency injection allows applications to share expensive resources like database connection pools and caches. This architecture makes services testable without HTTP layer overhead and allows the package to be imported and used as a library in other Go applications. **CRITICAL**: Go's `internal/` package visibility rules prevent external applications from importing packages within `internal/`. Therefore, services must be in public packages (e.g., `services/`, `pkg/services/`) to enable cross-application reuse as described in the usage examples.
 
 **Architecture Layers**:
 ```
 HTTP Handler (thin) → Service Interface (business logic) → Repository (data access)
 ```
+
+**Package Structure for Reusability**:
+
+```go
+// ✅ CORRECT: Services in public package (reusable)
+github.com/yourorg/myapp/
+├── services/          // PUBLIC - can be imported by other apps
+│   ├── product_service.go
+│   ├── order_service.go
+│   └── errors.go      // Sentinel errors
+├── handlers/          // PUBLIC - can be reused by other apps (optional)
+│   ├── product_handler.go
+│   └── error_codes.go
+├── api/gen/pim/v1/    // PUBLIC - protobuf generated (MUST be importable)
+│   ├── product.pb.go  // Returned by ProductService.Create()
+│   └── template.pb.go
+└── internal/          // INTERNAL - implementation details only
+    ├── models/        // ✅ CAN be internal (services return protobuf, not models)
+    │   └── product.go // Only used inside services for database mapping
+    ├── database/      // Connection helpers (app-specific)
+    ├── middleware/    // Logging, CORS (app-specific)
+    └── config/        // Config loading (not exposed)
+
+// ❌ WRONG: Services in internal (NOT reusable)
+github.com/yourorg/myapp/
+└── internal/
+    ├── services/      // WRONG! Cannot be imported externally
+    │   └── product_service.go
+    └── handlers/
+        └── product_handler.go
+
+// External app trying to use services:
+import "github.com/yourorg/myapp/internal/services"  // ❌ FAILS! Cannot import internal
+```
+
+**Why Models CAN Stay Internal** (Services Return Protobuf):
+```go
+// ✅ CORRECT: Services return protobuf (public), use models internally
+// services/product_service.go (PUBLIC package)
+package services
+
+import (
+    "yourapp/internal/models"  // ✅ OK! Internal use within service
+    pb "yourapp/api/gen/pim/v1"  // ✅ PUBLIC protobuf types
+    "gorm.io/gorm"
+)
+
+type ProductService interface {
+    Create(ctx context.Context, req *pb.CreateProductRequest) (*pb.Product, error)
+    //                                                          ^^^^^^^^^^^^^
+    //                                                          PUBLIC protobuf type!
+}
+
+type productService struct {
+    db *gorm.DB
+}
+
+func (s *productService) Create(ctx context.Context, req *pb.CreateProductRequest) (*pb.Product, error) {
+    // Use internal models for database
+    product := &models.Product{  // ✅ Internal model (private)
+        Name: req.Name,
+        SKU:  req.Sku,
+    }
+    
+    s.db.Create(product)  // Save GORM model
+    
+    // Return protobuf (public type)
+    return &pb.Product{  // ✅ Public protobuf
+        Id:   product.ID,
+        Name: product.Name,
+        Sku:  product.SKU,
+    }, nil
+}
+
+// External app using service:
+import (
+    "yourapp/services"  // ✅ Can import
+    pb "yourapp/api/gen/pim/v1"  // ✅ Can import protobuf
+)
+
+svc := services.NewProductService(db)
+product, _ := svc.Create(ctx, &pb.CreateProductRequest{...})
+// product is *pb.Product (public protobuf) - external app can use it! ✅
+// models.Product is never exposed - stays internal ✅
+```
+
+**Key Insight**: Because services follow Principle VI (Protobuf Data Structures), they return protobuf types, not GORM models. Models are **only used internally** for database mapping and **never exposed** in the public API. Therefore, models CAN safely remain in `internal/models/`.
+
+**When to Use internal/**:
+- ✅ Database connection helpers (not part of public API)
+- ✅ **Middleware** (application-specific - logging format, CORS policies, etc.)
+- ✅ **Models** (internal data structures - services return protobuf, not models)
+- ✅ Configuration loaders (implementation detail)
+- ✅ Private utilities (not meant for external use)
+- ❌ **Services** (MUST be public - promised reusability)
+- ❌ **Protobuf generated code** (api/gen/ - needed by external apps to call services)
+- ⚠️  **Handlers** (depends - public if reusable, internal if app-specific)
+
+**IMPORTANT - Protobuf Return Types**: Services return **protobuf types** (`*pb.Product`, `*pb.ProductTemplate`), NOT GORM models. This means:
+- ✅ Models CAN stay in `internal/models/` (only used internally by services)
+- ✅ Protobuf types (`api/gen/pim/v1/`) MUST be importable (already generated in non-internal location)
+- ✅ External apps only need to import services and protobuf packages, not models
+- ✅ Go's compiler is happy - public services return public types (protobuf)
+
+**Middleware Rationale**: Middleware is application-specific implementation (logging format, CORS policies, recovery behavior). External apps reusing your handlers should apply their own middleware. Keep middleware internal unless you're building a middleware library.
 
 **Example Service Interface**:
 ```go
@@ -498,7 +589,7 @@ func main() {
 }
 
 // Application 3: Embedded in larger application
-import "github.com/yourorg/apidemo2/services"
+import "github.com/yourorg/apidemo2/services"  // PUBLIC package (not internal/)
 
 func processOrders() {
     // Import and use services directly
@@ -507,6 +598,9 @@ func processOrders() {
     product, err := productSvc.Get(ctx, productID)
     // Use product in your business logic
 }
+
+// Note: Services in internal/services would FAIL:
+// import "github.com/yourorg/apidemo2/internal/services"  // ❌ Cannot import internal
 ```
 
 **Testing Through HTTP Layer (Full Stack)**:
@@ -1651,4 +1745,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.8.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
+**Version**: 1.8.1 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
