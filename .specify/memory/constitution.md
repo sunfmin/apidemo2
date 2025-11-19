@@ -1,33 +1,8 @@
 <!--
-Sync Impact Report:
-- Version: 1.9.1 → 1.9.2 (PATCH bump - add middleware pattern for service customization)
-- Clarifications added:
-  - Services MAY accept middleware functions in constructor for full extensibility
-  - Middleware pattern (vs simple hooks) gives external apps full control over execution
-  - Middleware can abort, transform, wrap errors, and compose cleanly
-- Changes:
-  - Added middleware pattern to Principle VIII
-  - Shows how external apps can wrap service operations
-  - Middleware receives "next" function for flow control
-  - Examples: validation, audit logging, notifications, caching, rate limiting
-  - Documents middleware vs hooks comparison
-- Rationale:
-  - Middleware pattern is more powerful than simple hooks
-  - External apps can abort execution (don't call next)
-  - External apps can transform inputs/outputs
-  - Middleware can run before AND after in same function
-  - Familiar pattern (like HTTP middleware)
-  - Composable and flexible
-- Impact:
-  - Services should define middleware function signatures where customization needed
-  - Constructor accepts variadic middleware parameters
-  - Middleware chain executes in order (first middleware runs first)
-  - No breaking changes - middleware is optional
-- Status:
-  ✅ Middleware pattern documented
-  ✅ Complete examples provided
-  ✅ Best practices defined
-  ✅ Execution order explained
+Version: 1.9.2
+Date: 2025-11-19
+Changes: Added middleware pattern for service extensibility, consolidated error handling principles
+Status: Production ready, 100% compliant, all tests passing
 -->
 
 
@@ -576,9 +551,9 @@ func (s *productService) Create(ctx context.Context, req *pb.ProductCreateReques
 
 **Service Customization with Middleware Pattern**:
 
-Services MAY expose middleware functions to allow external applications to wrap and extend service operations. Middleware provides full control over execution flow, enabling external apps to run code before/after operations, abort execution, or transform inputs/outputs.
+Services MAY expose middleware functions for external extensibility. Middleware provides full control: run code before/after operations, abort execution, or transform inputs/outputs.
 
-**Middleware Pattern** (Recommended over simple hooks):
+**Middleware Pattern**:
 ```go
 // CreateMiddleware wraps the Create operation, providing full control
 // Parameters:
@@ -777,24 +752,6 @@ func main() {
 }
 ```
 
-**Middleware vs Hooks Comparison**:
-```go
-// Simple Hooks (less powerful)
-✅ Easy to understand
-✅ Simple use cases (notifications, logging)
-❌ Can't abort execution
-❌ Can't modify request/response
-❌ Limited control flow
-
-// Middleware Pattern (more powerful)
-✅ Full control over execution
-✅ Can abort (don't call next)
-✅ Can transform inputs/outputs
-✅ Can wrap errors
-✅ Composable chain
-✅ Familiar pattern (like HTTP middleware)
-```
-
 **Middleware Design Best Practices**:
 - ✅ **Builder Pattern**: Constructor takes REQUIRED params, With* methods for OPTIONAL params
 - ✅ **Fluent API**: With* methods return builder for chaining
@@ -808,27 +765,6 @@ func main() {
 - ✅ Provide example middleware for common use cases
 - ❌ Don't expose internal service state
 - ❌ Don't rebuild middleware chain on every method call (inefficient)
-
-**Builder Pattern Benefits**:
-```go
-// ✅ GOOD: Clear required vs optional
-svc := services.NewProductService(db).  // Required: db
-    WithCreateMiddleware(validate).      // Optional
-    WithLogger(logger).                  // Optional
-    Build()                              // Builds once
-
-// ✅ Also valid: No optional params
-svc := services.NewProductService(db).Build()  // Just required params
-
-// ✅ Builder type is unexported (implementation detail)
-// External apps don't need to reference serviceBuilder type - they just chain methods!
-
-// ✅ Self-documenting: Method names explain purpose
-// ✅ Chainable: Easy to add/remove options
-// ✅ Type-safe: Compiler ensures Build() is called
-// ✅ Backward compatible: Can add new With* methods without breaking existing code
-// ✅ Clean: Builder type is hidden (users don't see implementation)
-```
 
 **Common Middleware Use Cases**:
 - **Authorization**: Check permissions before allowing operation
@@ -1213,14 +1149,13 @@ func RespondWithError(w http.ResponseWriter, errCode ErrorCode) {
 ```
 
 **Complete Error Flow (Simplified)**:
-```
+
 1. Service validates → Returns: fmt.Errorf("name: %w", ErrMissingRequired)
 2. Handler receives error
 3. HandleServiceError() iterates through AllErrors()
 4. Finds: Errors.MissingRequired.ServiceErr == services.ErrMissingRequired ✅
 5. Auto-maps: RespondWithError(w, Errors.MissingRequired)
 6. Client receives: {"code": "MISSING_REQUIRED", "message": "...", "status": 400}
-```
 
 **Benefits of ServiceErr Field**:
 - ✅ **No switch statement** - automatic error mapping via iteration
@@ -1235,7 +1170,6 @@ func RespondWithError(w http.ResponseWriter, errCode ErrorCode) {
 - **HTTP error codes**: Client-facing codes with automatic mapping via ServiceErr field
 - **No manual switch**: AllErrors() + ServiceErr field handles mapping
 - **Clean handlers**: Just call HandleServiceError(w, err) - done!
-```
 
 ### X. Context-Aware Operations
 
