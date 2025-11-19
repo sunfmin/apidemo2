@@ -282,43 +282,33 @@ func (h *ProductHandler) BulkUpdateStatus(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleServiceError converts service errors to appropriate HTTP responses using typed error codes
-// Uses errors.Is() and errors.As() for type-safe error checking (Principle XI)
+// HandleServiceError converts service errors to appropriate HTTP responses using automatic mapping
+// Uses ErrorCode.ServiceErr field for automatic error detection - NO SWITCH NEEDED!
 func HandleServiceError(w http.ResponseWriter, err error) {
-	// Use errors.Is() to check for specific error types (works with wrapped errors)
-	switch {
-	case errors.Is(err, services.ErrTemplateNotFound):
-		RespondWithErrorMessage(w, Errors.TemplateNotFound, err.Error())
-	case errors.Is(err, services.ErrProductNotFound):
-		RespondWithErrorMessage(w, Errors.ProductNotFound, err.Error())
-	case errors.Is(err, services.ErrVariantNotFound):
-		RespondWithErrorMessage(w, Errors.VariantNotFound, err.Error())
-	case errors.Is(err, services.ErrMediaNotFound):
-		RespondWithErrorMessage(w, Errors.MediaNotFound, err.Error())
-	case errors.Is(err, services.ErrDuplicateSKU):
-		RespondWithErrorMessage(w, Errors.DuplicateSKU, err.Error())
-	case errors.Is(err, services.ErrDuplicateName):
-		RespondWithErrorMessage(w, Errors.DuplicateName, err.Error())
-	case errors.Is(err, services.ErrAlreadyExists):
-		RespondWithErrorMessage(w, Errors.AlreadyExists, err.Error())
-	case errors.Is(err, services.ErrInvalidSKU):
-		RespondWithErrorMessage(w, Errors.ValidationFailed, err.Error())
-	case errors.Is(err, services.ErrMissingRequired):
-		RespondWithErrorMessage(w, Errors.MissingRequired, err.Error())
-	case errors.Is(err, services.ErrInvalidRequest):
-		RespondWithErrorMessage(w, Errors.InvalidRequest, err.Error())
-	case errors.Is(err, context.Canceled):
+	// Check context errors first (special handling)
+	if errors.Is(err, context.Canceled) {
 		http.Error(w, "Request cancelled", 499) // Client closed connection
-	case errors.Is(err, context.DeadlineExceeded):
-		http.Error(w, "Request timeout", 504) // Gateway timeout
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		RespondWithErrorMessage(w, Errors.NotFound, err.Error())
-	case errors.Is(err, services.ErrValueOutOfRange):
-		RespondWithErrorMessage(w, Errors.ValueOutOfRange, err.Error())
-	case errors.Is(err, services.ErrInvalidType):
-		RespondWithErrorMessage(w, Errors.InvalidType, err.Error())
-	default:
-		// True internal errors - don't expose details to client
-		RespondWithErrorMessage(w, Errors.InternalError, "Internal server error")
+		return
 	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		http.Error(w, "Request timeout", 504) // Gateway timeout
+		return
+	}
+
+	// Check GORM-specific errors
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		RespondWithErrorMessage(w, Errors.NotFound, err.Error())
+		return
+	}
+
+	// Automatic mapping: iterate through all error codes
+	for _, errCode := range AllErrors() {
+		if errCode.ServiceErr != nil && errors.Is(err, errCode.ServiceErr) {
+			RespondWithErrorMessage(w, errCode, err.Error())
+			return
+		}
+	}
+
+	// Default: Internal error (don't expose details to client)
+	RespondWithErrorMessage(w, Errors.InternalError, "Internal server error")
 }
