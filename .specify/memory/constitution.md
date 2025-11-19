@@ -1,32 +1,36 @@
 <!--
 Sync Impact Report:
-- Version: 1.6.1 → 1.7.0 (MINOR bump - new principle added)
+- Version: 1.7.0 → 1.8.0 (MINOR bump - new principle added)
 - New principles added:
-  - X. Context-Aware Operations - All I/O and long-running operations MUST accept and respect context.Context
+  - XI. Error Wrapping and Propagation - All errors MUST be wrapped with context using standard library
 - Principle details:
-  - HTTP handlers MUST extract context from http.Request
-  - Service methods MUST accept context.Context as first parameter
-  - Database operations MUST use ctx-aware GORM methods (WithContext)
-  - External calls MUST propagate context for cancellation and tracing
-  - Context MUST be respected for timeouts and cancellation
-  - Tests MUST verify context cancellation behavior
+  - Use fmt.Errorf with %w verb to wrap errors and preserve error chains
+  - Add contextual information at each layer as errors propagate
+  - Use errors.Is() and errors.As() for error type checking (NOT string comparison)
+  - NEVER swallow errors without logging or returning them
+  - Service layer MUST add business context to errors
+  - HTTP layer MUST NOT expose internal error details to clients
+  - Tests MUST verify error wrapping and unwrapping with errors.Is()
 - Rationale:
-  - Enables request timeout control and cancellation propagation
-  - Supports distributed tracing context propagation
-  - Prevents resource leaks from abandoned operations
-  - Follows Go best practices for concurrent operations
-  - Enables graceful shutdown and cancellation
+  - Standard library error wrapping (since Go 1.13) provides error chains
+  - Adding context at each layer aids debugging without stack traces
+  - errors.Is/As enable proper error type checking across wrapped errors
+  - Stack traces NOT available in standard library (pkg/errors archived)
+  - Error context helps trace error origin and flow through layers
 - Impact:
-  - All new I/O operations MUST accept context.Context
-  - Service interfaces MUST include context.Context as first parameter
-  - Database calls MUST use db.WithContext(ctx)
-  - Tests MUST verify context cancellation where applicable
-  - Existing code should be migrated to use context
+  - All error returns MUST wrap lower-level errors with fmt.Errorf("%w", err)
+  - Error messages MUST add contextual information (operation, parameters)
+  - Error checking MUST use errors.Is/As (not string matching or type assertions)
+  - Service methods MUST wrap errors with business context
+  - Tests MUST verify error chains with errors.Is()
+  - FIXED: Principle IX example updated to use errors.Is() (was using string comparison)
 - Templates requiring updates:
-  ✅ plan-template.md - already references context.Context in service layer examples
-  ✅ spec-template.md - edge case section can benefit but not required to change
-  ✅ tasks-template.md - already mentions context.Context in service layer guidance
-  ⚠️  No breaking changes - templates already demonstrate context usage
+  ✅ plan-template.md - error handling examples already show good patterns
+  ✅ spec-template.md - no changes needed
+  ✅ tasks-template.md - error handling already implied in service layer
+  ⚠️  No breaking changes - adding best practices guidance
+- Conflicts resolved:
+  ✅ Principle IX example now uses errors.Is() instead of strings.Contains() for consistency with Principle XI
 -->
 
 
@@ -617,8 +621,10 @@ var Errors = struct {
 
 **Usage in Handlers**:
 ```go
-// CORRECT: Use singleton instance
+// CORRECT: Use singleton instance with errors.Is() for error checking
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    
     var req pb.CreateProductRequest
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         RespondWithError(w, Errors.InvalidRequest)
@@ -627,9 +633,10 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
     
     product, err := h.service.Create(ctx, &req)
     if err != nil {
-        if strings.Contains(err.Error(), "not found") {
+        // Use errors.Is() for error type checking (MANDATORY - see Principle XI)
+        if errors.Is(err, ErrProductNotFound) {
             RespondWithError(w, Errors.ProductNotFound)
-        } else if strings.Contains(err.Error(), "duplicate") {
+        } else if errors.Is(err, ErrDuplicateSKU) {
             RespondWithError(w, Errors.DuplicateSKU)
         } else {
             RespondWithError(w, Errors.InternalError)
@@ -905,6 +912,420 @@ func (s *productService) BulkUpdate(ctx context.Context, updates []*pb.ProductUp
     
     return tx.Commit().Error
 }
+```
+
+### XI. Error Wrapping and Propagation
+
+All errors MUST be wrapped with context using Go's standard library error handling:
+- Errors MUST be wrapped using `fmt.Errorf()` with the `%w` verb to preserve error chains
+- Error messages MUST add contextual information at each layer (operation name, input parameters, entity IDs)
+- Error type checking MUST use `errors.Is()` and `errors.As()` (NOT string comparison or type assertions)
+- Errors MUST NEVER be swallowed without logging or returning them upward
+- Service layer MUST wrap errors with business context before returning to handlers
+- Repository/database errors MUST be wrapped with entity and operation context
+- HTTP handlers MUST translate internal errors to appropriate error codes (use singleton ErrorCode definitions)
+- HTTP responses MUST NOT expose internal error details or stack traces to clients
+- Tests MUST verify error wrapping chains using `errors.Is()` and `errors.As()`
+- Sentinel errors (package-level error variables) MAY be defined for domain-specific errors
+- Custom error types MAY be defined when additional error metadata is needed
+
+**Rationale**: Go's standard library error wrapping (introduced in Go 1.13) provides error chains without requiring third-party packages. The `%w` verb preserves the error chain, enabling `errors.Is()` and `errors.As()` to traverse wrapped errors. Adding contextual information at each layer creates an "error breadcrumb trail" that aids debugging even without stack traces (which are NOT available in the standard library - `github.com/pkg/errors` is archived). This approach is idiomatic Go and provides sufficient debugging information through error message context. Proper error wrapping enables callers to check error types across layers while maintaining encapsulation.
+
+**Note on Stack Traces**: The Go standard library does NOT provide stack trace functionality. The popular `github.com/pkg/errors` package (which did provide stack traces) was archived in 2021. Instead of stack traces, use comprehensive error wrapping with context at each layer to create a debugging trail.
+
+**Example - Error Wrapping in Service Layer**:
+```go
+import (
+    "context"
+    "errors"
+    "fmt"
+    "gorm.io/gorm"
+)
+
+// Define sentinel errors for domain-specific cases (OPTIONAL but recommended)
+var (
+    ErrProductNotFound = errors.New("product not found")
+    ErrInvalidSKU      = errors.New("invalid SKU format")
+    ErrDuplicateSKU    = errors.New("SKU already exists")
+)
+
+// Service method wraps errors with business context
+func (s *productService) Create(ctx context.Context, req *pb.ProductCreateRequest) (*pb.Product, error) {
+    span, ctx := opentracing.StartSpanFromContext(ctx, "ProductService.Create")
+    defer span.Finish()
+    
+    // Validate input - return sentinel error directly
+    if req.Name == "" {
+        return nil, fmt.Errorf("product name cannot be empty")
+    }
+    
+    // Validate SKU format
+    if !isValidSKU(req.Sku) {
+        // Return sentinel error with context
+        return nil, fmt.Errorf("create product: %w: %s", ErrInvalidSKU, req.Sku)
+    }
+    
+    product := &Product{
+        Name:        req.Name,
+        SKU:         req.Sku,
+        Description: req.Description,
+    }
+    
+    tx := s.db.WithContext(ctx).Begin()
+    defer tx.Rollback()
+    
+    // Wrap database errors with business context
+    if err := tx.Create(product).Error; err != nil {
+        // Check for duplicate key violation (database-specific)
+        if isDuplicateKeyError(err) {
+            // Wrap with sentinel error for duplicate
+            return nil, fmt.Errorf("create product with SKU %s: %w", req.Sku, ErrDuplicateSKU)
+        }
+        // Wrap generic database errors with operation context
+        return nil, fmt.Errorf("create product in database (name=%s, sku=%s): %w", req.Name, req.Sku, err)
+    }
+    
+    if err := tx.Commit().Error; err != nil {
+        return nil, fmt.Errorf("commit product creation transaction (sku=%s): %w", req.Sku, err)
+    }
+    
+    s.logger.Info("product created successfully", "sku", req.Sku, "id", product.ID)
+    return toProto(product), nil
+}
+
+func (s *productService) Get(ctx context.Context, id string) (*pb.Product, error) {
+    var product Product
+    
+    // Wrap database errors with query context
+    if err := s.db.WithContext(ctx).First(&product, "id = ?", id).Error; err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            // Wrap with sentinel error
+            return nil, fmt.Errorf("get product with id %s: %w", id, ErrProductNotFound)
+        }
+        // Wrap other database errors
+        return nil, fmt.Errorf("query product by id %s: %w", id, err)
+    }
+    
+    return toProto(&product), nil
+}
+```
+
+**HTTP Handler - Error Translation**:
+```go
+import (
+    "errors"
+    "net/http"
+)
+
+// HTTP handler translates service errors to HTTP responses
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    
+    span, ctx := opentracing.StartSpanFromContext(ctx, "POST /api/products")
+    defer span.Finish()
+    
+    var req pb.ProductCreateRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        // Wrap parsing error with context
+        span.SetTag("error", true)
+        RespondWithError(w, Errors.InvalidRequest)
+        return
+    }
+    
+    // Call service layer
+    product, err := h.service.Create(ctx, &req)
+    if err != nil {
+        span.SetTag("error", true)
+        
+        // Use errors.Is() to check for specific error types (MANDATORY)
+        // This works even if error is wrapped multiple times
+        if errors.Is(err, ErrProductNotFound) {
+            RespondWithError(w, Errors.ProductNotFound)
+            return
+        }
+        if errors.Is(err, ErrDuplicateSKU) {
+            RespondWithError(w, Errors.DuplicateSKU)
+            return
+        }
+        if errors.Is(err, ErrInvalidSKU) {
+            RespondWithError(w, Errors.ValidationFailed)
+            return
+        }
+        if errors.Is(err, context.Canceled) {
+            http.Error(w, "Request cancelled", 499)
+            return
+        }
+        if errors.Is(err, context.DeadlineExceeded) {
+            http.Error(w, "Request timeout", 504)
+            return
+        }
+        
+        // Log internal error details (server-side only)
+        h.logger.Error("failed to create product", "error", err)
+        
+        // Return generic error to client (DO NOT expose internal details)
+        RespondWithError(w, Errors.InternalError)
+        return
+    }
+    
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(product)
+}
+
+func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    id := r.URL.Query().Get("id")
+    
+    product, err := h.service.Get(ctx, id)
+    if err != nil {
+        // Check error type using errors.Is (works with wrapped errors)
+        if errors.Is(err, ErrProductNotFound) {
+            RespondWithError(w, Errors.ProductNotFound)
+            return
+        }
+        
+        h.logger.Error("failed to get product", "id", id, "error", err)
+        RespondWithError(w, Errors.InternalError)
+        return
+    }
+    
+    json.NewEncoder(w).Encode(product)
+}
+```
+
+**WRONG - Do Not Use String Comparison**:
+```go
+// WRONG: String comparison is fragile and doesn't work with wrapped errors
+if err != nil {
+    if strings.Contains(err.Error(), "not found") {  // BAD!
+        RespondWithError(w, Errors.NotFound)
+        return
+    }
+}
+
+// CORRECT: Use errors.Is() for sentinel errors
+if err != nil {
+    if errors.Is(err, ErrProductNotFound) {  // GOOD!
+        RespondWithError(w, Errors.NotFound)
+        return
+    }
+}
+```
+
+**Custom Error Types with Additional Metadata**:
+```go
+// Define custom error type when you need additional metadata
+type ValidationError struct {
+    Field   string
+    Value   string
+    Message string
+}
+
+func (e *ValidationError) Error() string {
+    return fmt.Sprintf("validation failed for field %s (value=%s): %s", e.Field, e.Value, e.Message)
+}
+
+// Usage in service
+func (s *productService) Update(ctx context.Context, id string, req *pb.ProductUpdateRequest) (*pb.Product, error) {
+    if req.Price < 0 {
+        return nil, &ValidationError{
+            Field:   "price",
+            Value:   fmt.Sprintf("%f", req.Price),
+            Message: "price cannot be negative",
+        }
+    }
+    
+    // ... rest of implementation
+}
+
+// Handler uses errors.As() to extract custom error type
+func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    id := r.URL.Query().Get("id")
+    
+    var req pb.ProductUpdateRequest
+    json.NewDecoder(r.Body).Decode(&req)
+    
+    product, err := h.service.Update(ctx, id, &req)
+    if err != nil {
+        // Use errors.As() to check for custom error types
+        var valErr *ValidationError
+        if errors.As(err, &valErr) {
+            // Access custom error fields
+            w.WriteHeader(http.StatusBadRequest)
+            json.NewEncoder(w).Encode(map[string]interface{}{
+                "error":   "validation_error",
+                "field":   valErr.Field,
+                "message": valErr.Message,
+            })
+            return
+        }
+        
+        h.logger.Error("update failed", "error", err)
+        RespondWithError(w, Errors.InternalError)
+        return
+    }
+    
+    json.NewEncoder(w).Encode(product)
+}
+```
+
+**Testing Error Wrapping**:
+```go
+func TestProductService_Create_DuplicateSKU(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products")
+    
+    service := NewProductService(db, logger, cache)
+    ctx := context.Background()
+    
+    // Create first product
+    req := &pb.ProductCreateRequest{
+        Name: "Test Product",
+        Sku:  "TEST-001",
+    }
+    _, err := service.Create(ctx, req)
+    if err != nil {
+        t.Fatalf("First create should succeed: %v", err)
+    }
+    
+    // Attempt to create duplicate
+    duplicateReq := &pb.ProductCreateRequest{
+        Name: "Another Product",
+        Sku:  "TEST-001", // Same SKU
+    }
+    product, err := service.Create(ctx, duplicateReq)
+    
+    // Verify error is returned
+    if err == nil {
+        t.Fatal("Expected error for duplicate SKU, got nil")
+    }
+    if product != nil {
+        t.Error("Expected nil product on error")
+    }
+    
+    // Use errors.Is() to check error type (MANDATORY for tests)
+    if !errors.Is(err, ErrDuplicateSKU) {
+        t.Errorf("Expected ErrDuplicateSKU, got: %v", err)
+    }
+    
+    // Verify error message contains context
+    errMsg := err.Error()
+    if !strings.Contains(errMsg, "TEST-001") {
+        t.Errorf("Error message should contain SKU: %s", errMsg)
+    }
+}
+
+func TestProductService_Get_NotFound(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products")
+    
+    service := NewProductService(db, logger, cache)
+    ctx := context.Background()
+    
+    // Try to get non-existent product
+    product, err := service.Get(ctx, "nonexistent-id")
+    
+    if err == nil {
+        t.Fatal("Expected error for non-existent product")
+    }
+    if product != nil {
+        t.Error("Expected nil product when not found")
+    }
+    
+    // Use errors.Is() to verify sentinel error
+    if !errors.Is(err, ErrProductNotFound) {
+        t.Errorf("Expected ErrProductNotFound, got: %v", err)
+    }
+    
+    // Verify GORM's ErrRecordNotFound is also wrapped
+    if !errors.Is(err, gorm.ErrRecordNotFound) {
+        t.Error("Error should wrap gorm.ErrRecordNotFound")
+    }
+}
+
+func TestProductService_Update_ValidationError(t *testing.T) {
+    db, cleanup := setupTestDB(t)
+    defer cleanup()
+    defer truncateTables(db, "products")
+    
+    service := NewProductService(db, logger, cache)
+    ctx := context.Background()
+    
+    // Try to update with invalid data
+    req := &pb.ProductUpdateRequest{
+        Price: -10.0, // Invalid negative price
+    }
+    
+    product, err := service.Update(ctx, "some-id", req)
+    
+    if err == nil {
+        t.Fatal("Expected validation error")
+    }
+    if product != nil {
+        t.Error("Expected nil product on validation error")
+    }
+    
+    // Use errors.As() to extract custom error type
+    var valErr *ValidationError
+    if !errors.As(err, &valErr) {
+        t.Fatalf("Expected ValidationError, got: %v", err)
+    }
+    
+    // Verify custom error fields
+    if valErr.Field != "price" {
+        t.Errorf("Expected field=price, got: %s", valErr.Field)
+    }
+    if !strings.Contains(valErr.Message, "negative") {
+        t.Errorf("Expected negative price message: %s", valErr.Message)
+    }
+}
+```
+
+**Error Wrapping Best Practices**:
+```go
+// ✅ GOOD: Wrap with context at each layer
+func (s *service) ProcessOrder(ctx context.Context, orderID string) error {
+    order, err := s.repo.GetOrder(ctx, orderID)
+    if err != nil {
+        return fmt.Errorf("process order %s: get order: %w", orderID, err)
+    }
+    
+    if err := s.payment.Charge(ctx, order.Total); err != nil {
+        return fmt.Errorf("process order %s: charge payment: %w", orderID, err)
+    }
+    
+    return nil
+}
+
+// ❌ WRONG: Swallowing errors
+func (s *service) ProcessOrder(ctx context.Context, orderID string) error {
+    order, err := s.repo.GetOrder(ctx, orderID)
+    if err != nil {
+        log.Println("error getting order")  // Lost error context!
+        return errors.New("failed to process")  // Original error lost!
+    }
+    return nil
+}
+
+// ❌ WRONG: Not wrapping errors
+func (s *service) ProcessOrder(ctx context.Context, orderID string) error {
+    order, err := s.repo.GetOrder(ctx, orderID)
+    if err != nil {
+        return err  // No context added - where did this fail?
+    }
+    return nil
+}
+
+// ✅ GOOD: Preserving error chain
+return fmt.Errorf("operation failed: %w", err)
+
+// ❌ WRONG: Breaking error chain
+return fmt.Errorf("operation failed: %v", err)  // %v doesn't preserve error chain!
+return errors.New("operation failed")  // Original error lost!
 ```
 
 ## Technology Stack
@@ -1199,6 +1620,12 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 - Reviewers MUST verify database operations use `db.WithContext(ctx)`
 - Reviewers MUST verify external HTTP calls use `http.NewRequestWithContext(ctx, ...)`
 - Reviewers MUST verify context is propagated through all layers (HTTP → Service → Repository)
+- Reviewers MUST verify errors are wrapped with `fmt.Errorf("%w", err)` (NOT `%v`)
+- Reviewers MUST verify error messages add contextual information at each layer
+- Reviewers MUST verify error checking uses `errors.Is()` and `errors.As()` (NOT string comparison)
+- Reviewers MUST verify errors are never swallowed without logging or returning
+- Reviewers MUST verify HTTP handlers do NOT expose internal error details to clients
+- Reviewers MUST verify tests use `errors.Is()` and `errors.As()` for error validation
 - Tests MUST be reviewed before implementation code
 
 ## Governance
@@ -1209,7 +1636,7 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 2. Changes MUST be reviewed by project lead or team
 3. Version MUST be incremented per semantic versioning:
    - **MAJOR**: Backward incompatible principle changes (e.g., removing no-mocking rule, allowing map[string]interface{})
-   - **MINOR**: New principles added or major expansions (e.g., adding protobuf requirement, adding tracing requirement, adding error definitions requirement, adding context-aware operations requirement)
+   - **MINOR**: New principles added or major expansions (e.g., adding protobuf requirement, adding tracing requirement, adding error definitions requirement, adding context-aware operations requirement, adding error wrapping requirement)
    - **PATCH**: Clarifications, examples, typo fixes
 4. All dependent templates and documentation MUST be updated to reflect changes
 
@@ -1224,4 +1651,4 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 This constitution is version-controlled alongside code and follows the same review process as code changes.
 
-**Version**: 1.7.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
+**Version**: 1.8.0 | **Ratified**: 2025-11-14 | **Last Amended**: 2025-11-19
