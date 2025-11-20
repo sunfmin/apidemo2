@@ -185,6 +185,54 @@ description: "Task list template for feature implementation"
 
 ---
 
+## Phase N-1: Comprehensive Error Testing (MANDATORY - Before Feature Complete)
+
+**Purpose**: Test ALL defined errors per Constitution Principle IX
+
+**⚠️ CRITICAL**: Feature is NOT complete until all errors are tested. Untested error paths are production bugs.
+
+### Error Testing Tasks (MANDATORY)
+
+- [ ] TXXX Create comprehensive error testing file: `tests/integration/error_handling_test.go`
+
+- [ ] TXXX Implement `TestAllSentinelErrors` function
+  - Test EVERY error defined in `services/errors.go`
+  - Verify error wrapping with `fmt.Errorf("%w", err)`
+  - Verify error checking with `errors.Is()`
+  - Use table-driven test structure
+  - Each error must have at least one test case
+  - Use real database fixtures to trigger errors
+  - Example: ErrProductNotFound, ErrDuplicateSKU, ErrMissingRequired, etc.
+
+- [ ] TXXX Implement `TestAllHTTPErrorCodes` function
+  - Test EVERY error code defined in `handlers/error_codes.go`
+  - Verify HTTP status codes (400, 404, 409, 500, etc.)
+  - Verify error response JSON structure
+  - Verify ErrorCode.ServiceErr mapping
+  - Use httptest.ResponseRecorder for HTTP testing
+  - Example: PRODUCT_NOT_FOUND, DUPLICATE_SKU, MISSING_REQUIRED, etc.
+
+- [ ] TXXX Implement `TestErrorFlowEndToEnd` function
+  - Verify complete error flow: Service → Handler → Client
+  - Test context errors (cancellation → 499, timeout → 504)
+  - Validate error message propagation
+  - Verify automatic error mapping via HandleServiceError()
+
+- [ ] TXXX Run comprehensive error test suite
+  - Execute: `go test -v -run "TestAll.*Errors|TestErrorFlow" ./tests/integration/`
+  - Verify every sentinel error has a passing test
+  - Verify every HTTP error code has a passing test
+  - Confirm zero untested error paths remain
+
+- [ ] TXXX Document error testing approach
+  - Create ERROR_TESTING_REPORT.md with coverage matrix
+  - List all tested errors with test case names
+  - Document any intentionally untested errors (with justification)
+
+**Checkpoint**: All errors tested - ready for code review
+
+---
+
 ## Phase N: Polish & Cross-Cutting Concerns
 
 **Purpose**: Improvements that affect multiple user stories
@@ -193,6 +241,7 @@ description: "Task list template for feature implementation"
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories
 - [ ] TXXX Verify all integration tests pass with real database
+- [ ] TXXX Verify all error tests pass: `go test -v -run "TestAll.*Errors"`
 - [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
 

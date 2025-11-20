@@ -1,7 +1,7 @@
 # External Application Usage Example
 
-**Constitution Version**: 1.9.1  
-**Date**: 2025-11-19
+**Constitution Version**: 1.9.4  
+**Date**: 2025-11-20
 
 ---
 
@@ -304,6 +304,91 @@ func NewResolver(db *gorm.DB) *Resolver {
 
 ---
 
+## Error Handling in External Apps
+
+External apps should handle service errors using Go's standard error checking:
+
+```go
+import (
+    "errors"
+    "github.com/sunfmin/apidemo2/backend/services"
+)
+
+func handleProductCreation(ctx context.Context, svc services.ProductService, req *pb.CreateProductRequest) {
+    product, err := svc.Create(ctx, req)
+    if err != nil {
+        // Type-safe error checking with errors.Is()
+        switch {
+        case errors.Is(err, services.ErrDuplicateSKU):
+            log.Printf("SKU already exists: %v", err)
+            // Handle duplicate
+        case errors.Is(err, services.ErrTemplateNotFound):
+            log.Printf("Template not found: %v", err)
+            // Handle missing template
+        case errors.Is(err, services.ErrMissingRequired):
+            log.Printf("Missing required field: %v", err)
+            // Handle validation error
+        case errors.Is(err, services.ErrValueOutOfRange):
+            log.Printf("Value out of range: %v", err)
+            // Handle range error
+        case errors.Is(err, context.Canceled):
+            log.Printf("Request canceled: %v", err)
+            // Handle cancellation
+        case errors.Is(err, context.DeadlineExceeded):
+            log.Printf("Request timeout: %v", err)
+            // Handle timeout
+        default:
+            log.Printf("Unexpected error: %v", err)
+            // Handle other errors
+        }
+        return
+    }
+    
+    log.Printf("✅ Created product: %s", product.Name)
+}
+```
+
+### Available Service Errors
+
+External apps can check for these sentinel errors:
+
+```go
+// Not Found Errors
+services.ErrTemplateNotFound  // Template doesn't exist
+services.ErrProductNotFound   // Product doesn't exist
+services.ErrVariantNotFound   // Variant doesn't exist
+services.ErrMediaNotFound     // Media file doesn't exist
+
+// Validation Errors
+services.ErrInvalidSKU        // SKU format is invalid
+services.ErrInvalidRequest    // Request contains invalid data
+services.ErrMissingRequired   // Required field is missing
+services.ErrInvalidType       // Data type mismatch
+services.ErrValueOutOfRange   // Value outside acceptable range
+
+// Conflict Errors
+services.ErrDuplicateSKU      // SKU already exists
+services.ErrDuplicateName     // Name already exists
+services.ErrAlreadyExists     // Resource already exists
+services.ErrHasProducts       // Template has associated products
+```
+
+**Best Practice**: Always use `errors.Is()` for error checking (never string comparison):
+
+```go
+// ✅ CORRECT
+if errors.Is(err, services.ErrDuplicateSKU) {
+    // Handle duplicate
+}
+
+// ❌ WRONG
+if strings.Contains(err.Error(), "already exists") {
+    // Fragile! Error message might change
+}
+```
+
+---
+
 ## Summary
 
 **External apps get**:
@@ -311,6 +396,7 @@ func NewResolver(db *gorm.DB) *Resolver {
 - ✅ Protobuf type contracts
 - ✅ Database schema (via AutoMigrate)
 - ✅ Type-safe APIs
+- ✅ Structured error handling
 
 **External apps DON'T see**:
 - ✅ Internal models (encapsulated)
