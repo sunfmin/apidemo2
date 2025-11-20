@@ -37,6 +37,7 @@ var Errors = struct {
 	DuplicateSKU  ErrorCode
 	DuplicateName ErrorCode
 	AlreadyExists ErrorCode
+	HasProducts   ErrorCode
 
 	// Internal errors (500)
 	InternalError ErrorCode
@@ -63,6 +64,7 @@ var Errors = struct {
 	DuplicateSKU:  ErrorCode{"DUPLICATE_SKU", "SKU already exists", http.StatusConflict, services.ErrDuplicateSKU},
 	DuplicateName: ErrorCode{"DUPLICATE_NAME", "Name already exists", http.StatusConflict, services.ErrDuplicateName},
 	AlreadyExists: ErrorCode{"ALREADY_EXISTS", "Resource already exists", http.StatusConflict, services.ErrAlreadyExists},
+	HasProducts:   ErrorCode{"HAS_PRODUCTS", "Template has associated products", http.StatusConflict, services.ErrHasProducts},
 
 	// Internal errors (500) - no service mapping (catch-all)
 	InternalError: ErrorCode{"INTERNAL_ERROR", "Internal server error", http.StatusInternalServerError, nil},
@@ -98,6 +100,7 @@ func AllErrors() []ErrorCode {
 		Errors.DuplicateSKU,
 		Errors.DuplicateName,
 		Errors.AlreadyExists,
+		Errors.HasProducts,
 		Errors.InternalError,
 		Errors.DatabaseError,
 		Errors.StorageError,

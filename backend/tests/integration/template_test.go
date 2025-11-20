@@ -533,6 +533,11 @@ func TestTemplateHandler_Delete(t *testing.T) {
 	// Create a fixture template
 	fixture := testutil.CreateTemplateFixture(db, "To Delete", "")
 
+	// Create a template with products for the "has products" test
+	templateWithProducts := testutil.CreateTemplateFixture(db, "Template With Products", `[{"name":"Field","type":"text","required":true}]`)
+	_ = testutil.CreateProductFixture(db, templateWithProducts.ID, "Product Using Template", "TEMPLATE-HAS-PROD-001", `{}`)
+	// Don't need pricing/inventory for this test
+
 	// Table-driven test cases
 	testCases := []struct {
 		name           string
@@ -550,6 +555,12 @@ func TestTemplateHandler_Delete(t *testing.T) {
 			name:           "non_existent_template",
 			templateID:     "550e8400-e29b-41d4-a716-446655440000",
 			expectedStatus: http.StatusNotFound,
+			expectError:    true,
+		},
+		{
+			name:           "template_has_products",
+			templateID:     templateWithProducts.ID,
+			expectedStatus: http.StatusConflict,
 			expectError:    true,
 		},
 	}

@@ -214,8 +214,15 @@ func (s *templateService) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("query template %s: %w", id, err)
 	}
 
-	// TODO: Check if template has products using it
-	// For now, allow deletion
+	// Check if template has products using it
+	var productCount int64
+	if err := s.db.WithContext(ctx).Model(&models.Product{}).Where("template_id = ?", id).Count(&productCount).Error; err != nil {
+		return fmt.Errorf("count products for template %s: %w", id, err)
+	}
+
+	if productCount > 0 {
+		return fmt.Errorf("template %s has %d products: %w", id, productCount, ErrHasProducts)
+	}
 
 	// Delete template
 	if err := s.db.WithContext(ctx).Delete(&template).Error; err != nil {
